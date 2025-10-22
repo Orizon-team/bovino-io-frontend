@@ -1,13 +1,22 @@
+  <script setup lang="ts">
+  import AppFooter from '../../components/layouts/AppFooter.vue';
+  </script>
+
+
 <template>
   <div>
-    <h1>Welcome to the Home Page</h1>
-    <p>This is the main landing page of the application.</p>
+  
+    <!-- Create a big card -->
+    <Section class="my-8 p-60 bg-primary  rounded-lg">
+      <h2 class="text-xl font-bold mb-4">Welcome to Bovino-io</h2>
+      <p class="text-gray-600">Monitoreo inteligente de ganado mediante tecnología BLE.</p>
+    </Section>
+
+    <AppFooter />
   </div>
+  
 </template>
 
-<script setup lang="ts">
-// This file is intentionally left blank.
-</script>
 
 <style scoped>
 h1 {
