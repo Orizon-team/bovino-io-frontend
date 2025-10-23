@@ -3,7 +3,6 @@
   import AppFooter from '../../components/layouts/AppFooter.vue';
   </script>
 
-
 <template>
   <div>
     <AppHeader />
@@ -13,11 +12,9 @@
       <p class="text-gray-600">Monitoreo inteligente de ganado mediante tecnología BLE.</p>
     </Section>
 
-    <AppFooter />
   </div>
   
 </template>
-
 
 <style scoped>
 h1 {
