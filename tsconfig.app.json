@@ -5,6 +5,12 @@
     "moduleResolution": "bundler",
     "types": ["vite/client"],
 
+    /* Path alias */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
