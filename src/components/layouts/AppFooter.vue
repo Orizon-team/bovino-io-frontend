@@ -16,31 +16,31 @@ const currentYear = computed<number>(() => {
       <div class="grid grid-cols-1 gap-8 md:grid-cols-4">
         <div class="space-y-4 ">
           <RouterLink to="/" class="flex items-center gap-2">
-            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-green-600 group-hover:bg-primary-dark transition-colors">
-              <Beef class="h-6 w-6 text-white" />
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+              <Beef class="h-6 w-6 text-primary-foreground" />
             </div>
-            <span class="text-xl font-bold text-gray-900">Bovino-io</span>
+            <span class="text-xl font-bold text-foreground">Bovino-io</span>
           </RouterLink>
-          <p class="text-sm text-gray-600 leading-relaxed">
+          <p class="text-sm text-muted-foreground leading-relaxed">
             Monitoreo inteligente de ganado mediante tecnología BLE. Mantén tu ganadería segura y controlada.
           </p>
         </div>
 
         <div class="text-center md:text-left">
-          <h3 class="mb-4 text-sm font-semibold text-gray-900">Producto</h3>
+          <h3 class="mb-4 text-sm font-semibold text-foreground">Producto</h3>
           <ul class="space-y-3">
             <li>
-              <RouterLink to="#features" class="text-sm text-gray-600 hover:text-primary transition-colors">
+              <RouterLink to="#features" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Características
               </RouterLink>
             </li>
             <li>
-              <RouterLink to="#how-it-works" class="text-sm text-gray-600 hover:text-primary transition-colors">
+              <RouterLink to="#how-it-works" class="text-sm text-gray-600 hover:text-foreground transition-colors">
                 Cómo funciona
               </RouterLink>
             </li>
             <li>
-              <RouterLink to="/dashboard" class="text-sm text-gray-600 hover:text-primary transition-colors">
+              <RouterLink to="/dashboard" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Dashboard
               </RouterLink>
             </li>
@@ -48,20 +48,20 @@ const currentYear = computed<number>(() => {
         </div>
 
         <div class="text-center md:text-left">
-          <h3 class="mb-4 text-sm font-semibold text-gray-900">Empresa</h3>
+          <h3 class="mb-4 text-sm font-semibold text-foreground">Empresa</h3>
           <ul class="space-y-3">
             <li>
-              <RouterLink to="#about" class="text-sm text-gray-600 hover:text-primary transition-colors">
+              <RouterLink to="#about" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Sobre Nosotros
               </RouterLink>
             </li>
             <li>
-              <RouterLink to="#contact" class="text-sm text-gray-600 hover:text-primary transition-colors">
+              <RouterLink to="#contact" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Contacto
               </RouterLink>
             </li>
             <li>
-              <RouterLink to="#support" class="text-sm text-gray-600 hover:text-primary transition-colors">
+              <RouterLink to="#support" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Soporte
               </RouterLink>
             </li>
@@ -69,21 +69,17 @@ const currentYear = computed<number>(() => {
         </div>
 
         <div class="text-center md:text-left">
-          <h3 class="mb-4 text-sm font-semibold text-gray-900">Contacto</h3>
+          <h3 class="mb-4 text-sm font-semibold text-foreground">Contacto</h3>
           <ul class="space-y-3">
-            <li class="flex items-center gap-2 text-sm text-gray-600 justify-center md:justify-start">
+            <li class="flex items-center gap-2 text-sm text-muted-foreground justify-center md:justify-start">
               <Mail class="h-4 w-4 shrink-0" />
-              <a href="mailto:info@bovino-io.com" class="hover:text-primary transition-colors">
-                info@bovino-io.com
-              </a>
+              <span> info@bovino-io.com</span>
             </li>
-            <li class="flex items-center gap-2 text-sm text-gray-600 justify-center md:justify-start">
+            <li class="flex items-center gap-2 text-sm text-muted-foreground justify-center md:justify-start">
               <Phone class="h-4 w-4 shrink-0" />
-              <a href="tel:+15551234567" class="hover:text-primary transition-colors">
-                +1 (555) 123-4567
-              </a>
+              <span> +1 (555) 123-4567</span>
             </li>
-            <li class="flex items-center gap-2 text-sm text-gray-600 justify-center md:justify-start">
+            <li class="flex items-center gap-2 text-sm text-muted-foreground justify-center md:justify-start">
               <MapPin class="h-4 w-4 shrink-0" />
               <span>Ciudad, País</span>
             </li>
@@ -91,8 +87,8 @@ const currentYear = computed<number>(() => {
         </div>
       </div>
 
-      <div class="mt-12 pt-8 border-t border-gray-300/40">
-        <p class="text-center text-sm text-gray-600">
+      <div class="mt-12 pt-8 border-t border-border/40">
+        <p class="text-center text-sm text-muted-foreground">
           © {{ currentYear }} Bovino-io. Todos los derechos reservados.
         </p>
       </div>

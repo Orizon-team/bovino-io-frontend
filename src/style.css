@@ -1,1 +1,39 @@
 @import "tailwindcss";
+
+@theme inline {
+    /* Colores principales del sistema Bovino-io */
+    --color-primary: #2D7A4D;
+    --color-primary-foreground: #FCFDF9;
+
+    /* Fondo */
+    --color-background: #FFFFFF;  /* white */
+
+    /* Texto */
+    --color-foreground: #0F172A; /* slate-900 */
+
+    /* Muted (fondos sutiles) */
+    --color-muted: #F1F5F9;  /* slate-100 */
+    --color-muted-foreground: #4B5563;  /* gray-600 */
+
+    /* Accent */
+    --color-accent: #CF7527; /* orange-600*/
+    --color-accent-foreground: #FFFFFF; /* white */
+
+    /* Bordes */
+    --color-border: #D1D5DB; /* gray-300 */
+    --color-input: #D1D5DB; /* gray-300 */
+    --color-ring: #166534; /* green-800 */
+
+    /* Card */
+    --color-card: #ffffff;
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+
+    body {
+        @apply bg-background text-foreground;
+    }
+}

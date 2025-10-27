@@ -5,23 +5,23 @@
 </script>
 
 <template>
-    <header class="sticky top-0 z-50 w-full border-b border-gray-300/40 bg-transparent backdrop-blur">    
+    <header class="sticky top-0 z-50 w-full border-b border-border/40 bg-transparent backdrop-blur">    
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex h-16 items-center justify-between">
       <RouterLink to="/" class="flex items-center gap-2">
-        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-[#1B7E47]">
-          <Beef class="h-6 w-6 text-white" />
+        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+          <Beef class="h-6 w-6 text-primary-foreground" />
         </div>
         <span class="text-xl font-bold text-foreground">Bovino-io</span>
       </RouterLink>
 
       <nav class="hidden md:flex items-center gap-6">
-        <RouterLink to="#" class="text-sm font-medium text-gray-500 transition-colors hover:text-gray-800">
+        <RouterLink to="#" class="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
           Características
         </RouterLink>
-        <RouterLink to="#" class="text-sm font-medium text-gray-500 transition-colors hover:text-gray-800">
+        <RouterLink to="#" class="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
           Cómo funciona
         </RouterLink>
-        <RouterLink to="#" class="text-sm font-medium text-gray-500 transition-colors hover:text-gray-800">
+        <RouterLink to="#" class="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
           Contacto
         </RouterLink>
       </nav>
