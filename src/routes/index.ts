@@ -15,6 +15,18 @@ const routes: RouteRecordRaw[] = [
     component: () => Auth
   },
   {
+    path: '/register',
+    name: 'Register',
+    component: () => import('../views/Auth/Register.vue'),
+    meta: {hideLayout: true}
+  },
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('../views/Auth/Login.vue'),
+    meta: { hideLayout: true }
+  },
+  {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => Dashboard

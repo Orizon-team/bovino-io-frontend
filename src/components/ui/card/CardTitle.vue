@@ -4,7 +4,7 @@ import { computed } from 'vue';
 const titleProps = defineProps<{ class?: string }>();
 
 const titleClass = computed(() => 
-  `leading-none font-semibold ${titleProps.class ?? ''}`
+  ` ${titleProps.class ?? ''}`
 );
 </script>
 

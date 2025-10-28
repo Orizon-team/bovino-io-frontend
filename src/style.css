@@ -19,6 +19,9 @@
     --color-accent: #CF7527; /* orange-600*/
     --color-accent-foreground: #FFFFFF; /* white */
 
+    /* Destructive (errores) */
+    --color-destructive: #EF4444; /* red-500 */
+
     /* Bordes */
     --color-border: #D1D5DB; /* gray-300 */
     --color-input: #D1D5DB; /* gray-300 */
@@ -26,6 +29,7 @@
 
     /* Card */
     --color-card: #ffffff;
+    --color-card-foreground: #0F172A; /* slate-900 */
 }
 
 @layer base {
