@@ -6,7 +6,7 @@
     --color-primary-foreground: #FCFDF9;
 
     /* Fondo */
-    --color-background: #FFFFFF;  /* white */
+    --color-background: #FCFCFA;  /* white with gray */
 
     /* Texto */
     --color-foreground: #0F172A; /* slate-900 */
@@ -28,8 +28,12 @@
     --color-ring: #166534; /* green-800 */
 
     /* Card */
-    --color-card: #ffffff;
+    --color-card: #FFFFFF;
     --color-card-foreground: #0F172A; /* slate-900 */
+
+    /* Popover colors */
+    --color-popover: #FFFFFF;
+    --color-popover-foreground: #0F172A; /* slate-900 */
 }
 
 @layer base {

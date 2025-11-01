@@ -1,7 +1,6 @@
-import { createRouter, createWebHistory,type RouteRecordRaw } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import Home from '../views/Landing/Home.vue'
 import Auth from '../views/Auth/Auth.vue'
-import Dashboard from '../views/Dashboard/Dashboard.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -12,13 +11,13 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/auth',
     name: 'Auth',
-    component: () => Auth
+    component: Auth
   },
   {
     path: '/register',
     name: 'Register',
     component: () => import('../views/Auth/Register.vue'),
-    meta: {hideLayout: true}
+    meta: { hideLayout: true }
   },
   {
     path: '/login',
@@ -28,8 +27,15 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/dashboard',
-    name: 'Dashboard',
-    component: () => Dashboard
+    component: () => import('../components/layouts/AppDashboard.vue'),
+    meta: { hideLayout: true },
+    children: [
+      {
+        path: '',
+        name: 'Dashboard',
+        component: () => import('../views/Dashboard/Dashboard.vue')
+      },
+    ]
   }
 ]
 
