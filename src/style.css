@@ -5,6 +5,10 @@
     --color-primary: #2D7A4D;
     --color-primary-foreground: #FCFDF9;
 
+    /* Secondary (para badges y botones secundarios) */
+    --color-secondary: #E8F5E9;  /* green-50 */
+    --color-secondary-foreground: #2D7A4D;  /* green-700 */
+
     /* Fondo */
     --color-background: #FCFCFA;  /* white with gray */
 
