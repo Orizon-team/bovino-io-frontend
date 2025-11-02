@@ -2,7 +2,7 @@
 		<div class="relative flex min-h-screen flex-col items-center justify-center p-4">
 			<div class="absolute inset-0 z-0">
 				<img
-					src="/images/herdcow.jpg"
+					src="/images/Hacienda.jpeg"
 					alt="Grupo de vacas blancas y negras"
 					class="h-full w-full object-cover"
 				/>
@@ -30,6 +30,7 @@
 				</CardHeader>
 				<CardContent>
 					<form @submit.prevent="handleSubmit" class="space-y-4">
+						<div v-if="serverError" class="text-destructive text-sm mb-2">{{ serverError }}</div>
 						<div class="space-y-2">
 							<Label for="email" class="text-foreground">Correo Electrónico</Label>
 							<Input
@@ -37,9 +38,12 @@
 								type="email"
 								placeholder="tu@email.com"
 								v-model="email"
+								@blur="touched.email = true"
+								:disabled="loading"
 								class="bg-background"
 								required
 							/>
+							<p v-if="touched.email && !isEmailValid" class="text-destructive text-sm mt-1">Por favor, introduce un correo válido.</p>
 						</div>
 
 						<div class="space-y-2">
@@ -47,17 +51,36 @@
 								<Label for="password" class="text-foreground">Contraseña</Label>
 												<RouterLink to="#" class="text-sm text-primary hover:underline">¿Olvidaste tu contraseña?</RouterLink>
 							</div>
-							<Input
-								id="password"
-								type="password"
-								placeholder="••••••••"
-								v-model="password"
-								class="bg-background"
-								required
-							/>
+							<div class="relative">
+								<Input
+									id="password"
+									:type="showPassword ? 'text' : 'password'"
+									placeholder="••••••••"
+									v-model="password"
+									@blur="touched.password = true"
+									:disabled="loading"
+									class="bg-background pr-10"
+									required
+								/>
+
+								<!-- eye toggle -->
+								<button
+									type="button"
+									@click="togglePassword"
+									:aria-pressed="showPassword"
+									class="absolute inset-y-0 right-2 flex items-center px-2 text-muted-foreground"
+								>
+									<Eye v-if="!showPassword" class="h-5 w-5 transform transition-transform duration-200" :class="showPassword ? 'rotate-180 scale-110' : 'rotate-0'" />
+									<EyeOff v-else class="h-5 w-5 transform transition-transform duration-200" :class="showPassword ? 'rotate-180 scale-110' : 'rotate-0'" />
+								</button>
+							</div>
+							<p v-if="touched.password && !isPasswordValid" class="text-destructive text-sm mt-1">La contraseña debe tener al menos 8 caracteres.</p>
 						</div>
 
-						<Button type="submit" class="w-full" size="lg">Iniciar Sesión</Button>
+							<Button :disabled="loading" :class="(loading ? 'opacity-50 cursor-not-allowed ' : '') + 'w-full'" type="submit" size="lg">
+								<span v-if="loading">Iniciando...</span>
+								<span v-else>Iniciar Sesión</span>
+							</Button>
 					</form>
 				</CardContent>
 				<CardFooter class="flex flex-col gap-4">
@@ -84,9 +107,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
-import { Beef } from 'lucide-vue-next'
+import { Beef, Eye, EyeOff } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
 import Label from '@/components/ui/Label.vue'
@@ -97,14 +120,52 @@ const router = useRouter()
 const email = ref('')
 const password = ref('')
 
-const handleSubmit = (e: Event) => {
+const touched = ref({ email: false, password: false })
+
+const loading = ref(false)
+const serverError = ref<string | null>(null)
+
+const showPassword = ref(false)
+function togglePassword() {
+	showPassword.value = !showPassword.value
+}
+
+const isEmailValid = computed(() => {
+	const value = email.value.trim()
+	// simple email regex (not exhaustive)
+	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+})
+
+const isPasswordValid = computed(() => {
+	return password.value.length >= 8
+})
+
+// Nota: el flujo actual permite iniciar sesión con cualquier credencial (mock)
+
+const handleSubmit = async (e: Event) => {
 	e.preventDefault()
-	// Sin validación por ahora — navegar al dashboard
-	router.push('/dashboard')
+	// marcar como touched para mostrar errores si existen
+	touched.value.email = true
+	touched.value.password = true
+
+	serverError.value = null
+	loading.value = true
+
+	try {
+		// Simular petición asíncrona (acepta cualquier credencial)
+		await new Promise((resolve) => setTimeout(resolve, 700))
+
+		// Guardar token mock y redirigir
+		localStorage.setItem('auth_token', 'mock-token')
+		router.push('/dashboard')
+	} catch (err) {
+		serverError.value = 'Error al iniciar sesión. Intenta más tarde.'
+	} finally {
+		loading.value = false
+	}
 }
 </script>
 
 <style scoped>
-/* No custom styles for now; Tailwind classes handle the layout */
 </style>
 
