@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { AlertTriangle, CheckCircle2, Info, Clock } from 'lucide-vue-next'
-import Button from '@/components/ui/Button.vue'
+import Button from '@/components/ui/button/Button.vue'
 
 interface Props {
   offlineCount: number

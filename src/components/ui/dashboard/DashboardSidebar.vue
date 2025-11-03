@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRoute, useRouter, RouterLink } from 'vue-router'
-import Button from '@/components/ui/Button.vue'
+import Button from '@/components/ui/button/Button.vue'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,

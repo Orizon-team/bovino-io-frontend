@@ -2,9 +2,9 @@
 import { ref } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { Beef } from 'lucide-vue-next'
-import Button from '@/components/ui/Button.vue'
-import Input from '@/components/ui/Input.vue'
-import Label from '@/components/ui/Label.vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card'
 
 const router = useRouter()
@@ -19,7 +19,7 @@ const formData = ref({
 
 const handleSubmit = (e: Event) => {
   e.preventDefault()
-  router.push('/dashboard')
+  router.push('/login')
 }
 </script>
 

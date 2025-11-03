@@ -110,9 +110,9 @@
 import { ref, computed } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { Beef, Eye, EyeOff } from 'lucide-vue-next'
-import Button from '@/components/ui/Button.vue'
-import Input from '@/components/ui/Input.vue'
-import Label from '@/components/ui/Label.vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card'
 
 const router = useRouter()

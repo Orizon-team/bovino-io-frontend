@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import Button from '@/components/ui/Button.vue'
+import { Button } from '@/components/ui/button'
 import NotificationsPanel from '@/components/ui/dashboard/NotificationsPanel.vue'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Bell } from 'lucide-vue-next'
