@@ -90,31 +90,31 @@ const mostPopularZone = computed(() => {
 </script>
 
 <template>
-  <div class="p-6 space-y-6">
+  <div class="p-4 sm:p-6 space-y-4 sm:space-y-6">
     <!-- Welcome Section with Total Cattle -->
-    <div class="flex items-start justify-between">
-      <div>
-        <h1 class="text-3xl font-bold text-foreground">Panel de Control</h1>
-        <p class="text-muted-foreground mt-1">Resumen general de tu ganadería</p>
+    <div class="flex flex-col sm:flex-row items-start sm:items-start justify-between gap-4">
+      <div class="w-full sm:w-auto">
+        <h1 class="text-2xl sm:text-3xl font-bold text-foreground">Panel de Control</h1>
+        <p class="text-sm sm:text-base text-muted-foreground mt-1">Resumen general de tu ganadería</p>
       </div>
       <Button
         variant="outline"
         size="lg"
-        class="flex items-center gap-3 h-auto py-3 px-4 hover:bg-primary/5 hover:border-primary transition-colors bg-transparent"
+        class="flex items-center gap-2 sm:gap-3 h-auto py-2 sm:py-3 px-3 sm:px-4 hover:bg-primary/5 hover:border-primary transition-colors bg-transparent w-full sm:w-auto justify-center sm:justify-start"
         @click="router.push('/dashboard/cattle')"
       >
-        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <Beef class="h-5 w-5 text-primary" />
+        <div class="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+          <Beef class="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
         </div>
         <div class="text-left">
           <p class="text-xs text-muted-foreground font-medium">Total de Ganado</p>
-          <p class="text-2xl font-bold text-foreground">{{ totalCattle }}</p>
+          <p class="text-xl sm:text-2xl font-bold text-foreground">{{ totalCattle }}</p>
         </div>
       </Button>
     </div>
 
     <!-- Stats Section -->
-    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-3">
       <StatsCard
         title="Zona más Popular"
         :value="mostPopularZone ? mostPopularZone[0] : 'N/A'"

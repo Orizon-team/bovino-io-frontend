@@ -46,15 +46,15 @@ const iconClasses = computed(() => {
     :class="variantClasses + ' cursor-pointer transition-colors duration-200'"
     @click="emit('click')"
   >
-    <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle class="text-sm font-medium">{{ title }}</CardTitle>
-      <div :class="'flex h-8 w-8 items-center justify-center rounded-lg ' + iconClasses">
-        <component :is="icon" class="h-4 w-4" />
+    <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3">
+      <CardTitle class="text-xs sm:text-sm font-medium">{{ title }}</CardTitle>
+      <div :class="'flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-lg shrink-0 ' + iconClasses">
+        <component :is="icon" class="h-3.5 w-3.5 sm:h-4 sm:w-4" />
       </div>
     </CardHeader>
-    <CardContent>
-      <div class="text-2xl font-bold">{{ value }}</div>
-      <p class="text-xs text-muted-foreground mt-1">{{ description }}</p>
+    <CardContent class="pt-0">
+      <div class="text-xl sm:text-2xl font-bold">{{ value }}</div>
+      <p class="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1">{{ description }}</p>
     </CardContent>
   </Card>
 </template>

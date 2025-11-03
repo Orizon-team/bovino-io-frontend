@@ -48,18 +48,18 @@ const maxStatusCount = computed(() => {
 </script>
 
 <template>
-  <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+  <div class="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-2">
     <!-- Zone Distribution Chart -->
     <Card>
       <CardHeader>
-        <CardTitle>Distribución por Zona</CardTitle>
+        <CardTitle class="text-base sm:text-lg">Distribución por Zona</CardTitle>
       </CardHeader>
       <CardContent>
-        <div class="space-y-4">
-          <div v-for="item in zoneCounts" :key="item.zone" class="space-y-2">
-            <div class="flex items-center justify-between text-sm">
-              <span class="font-medium text-foreground">{{ item.zone }}</span>
-              <span class="text-muted-foreground">{{ item.count }} animales</span>
+        <div class="space-y-3 sm:space-y-4">
+          <div v-for="item in zoneCounts" :key="item.zone" class="space-y-1.5 sm:space-y-2">
+            <div class="flex items-center justify-between text-xs sm:text-sm gap-2">
+              <span class="font-medium text-foreground truncate">{{ item.zone }}</span>
+              <span class="text-muted-foreground whitespace-nowrap">{{ item.count }} animales</span>
             </div>
             <div class="h-2 w-full overflow-hidden rounded-full bg-secondary">
               <div
@@ -68,7 +68,7 @@ const maxStatusCount = computed(() => {
               ></div>
             </div>
           </div>
-          <div v-if="zoneCounts.length === 0" class="text-center text-sm text-muted-foreground py-8">
+          <div v-if="zoneCounts.length === 0" class="text-center text-xs sm:text-sm text-muted-foreground py-6 sm:py-8">
             No hay datos disponibles
           </div>
         </div>
@@ -78,14 +78,14 @@ const maxStatusCount = computed(() => {
     <!-- Status Distribution Chart -->
     <Card>
       <CardHeader>
-        <CardTitle>Estado de Conexión</CardTitle>
+        <CardTitle class="text-base sm:text-lg">Estado de Conexión</CardTitle>
       </CardHeader>
       <CardContent>
-        <div class="space-y-4">
-          <div v-for="item in statusCounts" :key="item.status" class="space-y-2">
-            <div class="flex items-center justify-between text-sm">
+        <div class="space-y-3 sm:space-y-4">
+          <div v-for="item in statusCounts" :key="item.status" class="space-y-1.5 sm:space-y-2">
+            <div class="flex items-center justify-between text-xs sm:text-sm gap-2">
               <span class="font-medium text-foreground">{{ item.status }}</span>
-              <span class="text-muted-foreground">{{ item.count }} animales</span>
+              <span class="text-muted-foreground whitespace-nowrap">{{ item.count }} animales</span>
             </div>
             <div class="h-2 w-full overflow-hidden rounded-full bg-secondary">
               <div
