@@ -1,6 +1,8 @@
 <template>
   <input
     :type="type"
+    :value="modelValue"
+    @input="onInput"
     data-slot="input"
     v-bind="$attrs"
     :class="computedClass"
@@ -13,13 +15,23 @@ import { computed } from 'vue'
 interface InputProps {
   type?: string
   class?: string
+  modelValue?: string | number
 }
 
 const props = defineProps<InputProps>()
 
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: string): void
+}>()
+
+const onInput = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  emit('update:modelValue', target.value)
+}
+
 const computedClass = computed(() => {
   return [
-    'file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30',,
+    'file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30',
     'border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-sm transition-[color,box-shadow] outline-none',
     'file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium',
     'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm',

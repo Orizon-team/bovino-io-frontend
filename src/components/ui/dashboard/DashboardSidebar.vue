@@ -85,10 +85,10 @@ const handleSettings = () => {
           :key="item.href"
           :to="item.href"
           custom
-          v-slot="{ navigate, isActive }"
+          v-slot="{ navigate, isExactActive }"
         >
           <Button
-            :variant="isActive ? 'secondary' : 'ghost'"
+            :variant="isExactActive ? 'secondary' : 'ghost'"
             :class="getButtonClass(item.href)"
             @click="navigate"
           >

@@ -1,28 +1,41 @@
 <script setup lang="ts">
-import { inject, computed, ref, onMounted, onUnmounted } from 'vue'
+import { inject, ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { cn } from '@/lib/utils'
 
-interface Props {
-  position?: 'popper' | 'item-aligned'
-  class?: string
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  position: 'popper'
-})
+const props = withDefaults(
+  defineProps<{
+    class?: string
+  }>(),
+  {}
+)
 
 const select = inject<any>('select')
 const contentRef = ref<HTMLElement>()
+const contentStyle = ref<any>({})
 
-const contentClass = computed(() => {
-  const classes = [
-    'bg-popover text-popover-foreground',
-    'absolute z-50 max-h-96 min-w-[8rem] mt-1',
-    'overflow-x-hidden overflow-y-auto rounded-md border shadow-md',
-    'animate-in fade-in-0 zoom-in-95',
-    props.class
-  ]
-  return classes.filter(Boolean).join(' ')
-})
+const updatePosition = () => {
+  if (!select.isOpen.value) return
+  
+  const trigger = document.querySelector('[data-slot="select-trigger"]') as HTMLElement
+  if (!trigger) return
+
+  const triggerRect = trigger.getBoundingClientRect()
+  const viewportHeight = window.innerHeight
+  const spaceBelow = viewportHeight - triggerRect.bottom
+  const spaceAbove = triggerRect.top
+
+  // Decidir si abrir arriba o abajo
+  const openUpward = spaceBelow < 200 && spaceAbove > spaceBelow
+
+  contentStyle.value = {
+    position: 'fixed',
+    top: openUpward ? 'auto' : `${triggerRect.bottom + 4}px`,
+    bottom: openUpward ? `${viewportHeight - triggerRect.top + 4}px` : 'auto',
+    left: `${triggerRect.left}px`,
+    minWidth: `${triggerRect.width}px`,
+    zIndex: 50,
+  }
+}
 
 const handleClickOutside = (event: MouseEvent) => {
   if (!select.isOpen.value) return
@@ -36,12 +49,23 @@ const handleClickOutside = (event: MouseEvent) => {
   }
 }
 
+watch(() => select.isOpen.value, async (isOpen) => {
+  if (isOpen) {
+    await nextTick()
+    updatePosition()
+  }
+})
+
 onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
+  document.addEventListener('click', handleClickOutside, true)
+  window.addEventListener('scroll', updatePosition, true)
+  window.addEventListener('resize', updatePosition)
 })
 
 onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('click', handleClickOutside, true)
+  window.removeEventListener('scroll', updatePosition, true)
+  window.removeEventListener('resize', updatePosition)
 })
 </script>
 
@@ -51,12 +75,16 @@ onUnmounted(() => {
       v-if="select.isOpen.value"
       ref="contentRef"
       data-slot="select-content"
-      :class="contentClass"
-      style="position: fixed; top: var(--trigger-top, 0); left: var(--trigger-left, 0); width: var(--trigger-width, auto);"
+      :class="cn(
+        'bg-popover text-popover-foreground',
+        'max-h-96 overflow-y-auto rounded-md border shadow-md',
+        'animate-in fade-in-0 zoom-in-95 duration-200',
+        'p-1',
+        props.class
+      )"
+      :style="contentStyle"
     >
-      <div class="p-1">
-        <slot />
-      </div>
+      <slot />
     </div>
   </Teleport>
 </template>

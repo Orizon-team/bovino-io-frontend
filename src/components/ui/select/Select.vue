@@ -1,42 +1,41 @@
 <script setup lang="ts">
-import { ref, provide, computed } from 'vue'
+import { provide, ref, watch } from 'vue'
 
-interface Props {
-  modelValue?: string | number
-  placeholder?: string
+const props = defineProps<{
+  modelValue?: string
+  defaultValue?: string
   disabled?: boolean
-}
-
-const props = defineProps<Props>()
+}>()
 
 const emit = defineEmits<{
-  'update:modelValue': [value: string | number]
+  'update:modelValue': [value: string]
 }>()
 
 const isOpen = ref(false)
-const selectedValue = computed({
-  get: () => props.modelValue,
-  set: (value) => {
-    if (value !== undefined) {
-      emit('update:modelValue', value)
-    }
+const selectedValue = ref(props.modelValue || props.defaultValue || '')
+
+watch(() => props.modelValue, (newVal) => {
+  if (newVal !== undefined) {
+    selectedValue.value = newVal
   }
 })
+
+const selectValue = (value: string) => {
+  selectedValue.value = value
+  emit('update:modelValue', value)
+  isOpen.value = false
+}
 
 provide('select', {
   isOpen,
   selectedValue,
-  placeholder: props.placeholder,
-  disabled: props.disabled,
-  updateValue: (value: string | number) => {
-    selectedValue.value = value
-    isOpen.value = false
-  }
+  selectValue,
+  disabled: props.disabled
 })
 </script>
 
 <template>
-  <div data-slot="select" class="relative inline-block">
+  <div class="relative">
     <slot />
   </div>
 </template>
