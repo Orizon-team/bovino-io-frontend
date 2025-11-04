@@ -3,7 +3,6 @@ import { ref } from 'vue'
 import DashboardSidebar from '@/components/ui/dashboard/DashboardSidebar.vue'
 import DashboardHeader from '@/components/ui/dashboard/DashboardHeader.vue'
 
-// Estado para diálogos (cuando los crees)
 const addCattleOpen = ref(false)
 const manageZonesOpen = ref(false)
 
@@ -18,7 +17,6 @@ const handleManageZones = () => {
 
 <template>
   <div class="flex h-screen overflow-hidden bg-background">
-    <!-- Sidebar -->
     <DashboardSidebar 
       @add-cattle="handleAddCattle"
       @manage-zones="handleManageZones"

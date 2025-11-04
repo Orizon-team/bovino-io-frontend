@@ -24,7 +24,6 @@ const updatePosition = () => {
   const spaceBelow = viewportHeight - triggerRect.bottom
   const spaceAbove = triggerRect.top
 
-  // Decidir si abrir arriba o abajo
   const openUpward = spaceBelow < 200 && spaceAbove > spaceBelow
 
   contentStyle.value = {

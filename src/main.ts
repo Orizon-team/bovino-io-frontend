@@ -3,7 +3,6 @@ import './style.css'
 import App from './App.vue'
 import router from './routes' 
 
-// 🔧 Registrar Service Worker para PWA
 import { registerSW } from 'virtual:pwa-register'
 
 const updateSW = registerSW({

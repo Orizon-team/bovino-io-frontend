@@ -161,7 +161,6 @@ const deleteBeaconDialogOpen = ref(false)
 const selectedZone = ref<Zone | null>(null)
 const selectedBeacon = ref<{ zoneId: string; beacon: Beacon } | null>(null)
 
-// Form state
 const zoneFormData = ref<{ name: string; type: Zone['type'] }>({ name: '', type: 'pasture' })
 const beaconFormData = ref<{ deviceId: string; zoneId: string }>({ deviceId: '', zoneId: '' })
 

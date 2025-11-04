@@ -6,7 +6,6 @@
 </template>
 
 <script setup lang="ts">
-// This file is intentionally left blank.
 </script>
 
 <style scoped>

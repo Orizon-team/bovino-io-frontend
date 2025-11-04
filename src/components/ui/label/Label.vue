@@ -12,7 +12,6 @@
 <script setup lang="ts">
 import { defineProps } from 'vue'
 
-// Props
 defineProps<{
   className?: string
 }>()
