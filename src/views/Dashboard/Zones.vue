@@ -31,14 +31,12 @@ import {
   MapPin,
   Radio,
   Plus,
-  Wifi,
   WifiOff,
   Zap,
   AlertCircle,
   CheckCircle2,
   Pencil,
   Trash2,
-  Signal,
   ChevronDown,
   ChevronRight,
 } from 'lucide-vue-next'
@@ -46,8 +44,8 @@ import {
 type Beacon = {
   id: string
   deviceId: string
+  name: string
   status: 'active' | 'inactive' | 'warning'
-  signalStrength: number
   battery: number
   lastSeen: string
 }
@@ -57,7 +55,6 @@ type Zone = {
   name: string
   type: 'pasture' | 'stable' | 'feeding' | 'water'
   beacons: Beacon[]
-  cattleCount: number
 }
 
 const mockZones: Zone[] = [
@@ -65,21 +62,20 @@ const mockZones: Zone[] = [
     id: '1',
     name: 'Pastizal Norte',
     type: 'pasture',
-    cattleCount: 2,
     beacons: [
       {
         id: 'b1',
         deviceId: 'BLE-23323',
+        name: 'Sondeador Norte 1',
         status: 'active',
-        signalStrength: 95,
         battery: 87,
         lastSeen: 'Hace 1 min',
       },
       {
         id: 'b2',
         deviceId: 'BLE-23329',
+        name: 'Sondeador Norte 2',
         status: 'active',
-        signalStrength: 88,
         battery: 92,
         lastSeen: 'Hace 2 min',
       },
@@ -89,13 +85,12 @@ const mockZones: Zone[] = [
     id: '2',
     name: 'Establo A',
     type: 'stable',
-    cattleCount: 1,
     beacons: [
       {
         id: 'b3',
         deviceId: 'BLE-23324',
+        name: 'Sondeador Establo',
         status: 'active',
-        signalStrength: 98,
         battery: 95,
         lastSeen: 'Hace 30 seg',
       },
@@ -105,21 +100,20 @@ const mockZones: Zone[] = [
     id: '3',
     name: 'Área de Alimentación',
     type: 'feeding',
-    cattleCount: 1,
     beacons: [
       {
         id: 'b4',
         deviceId: 'BLE-23325',
+        name: 'Sondeador Comedor 1',
         status: 'warning',
-        signalStrength: 65,
         battery: 45,
         lastSeen: 'Hace 5 min',
       },
       {
         id: 'b5',
         deviceId: 'BLE-23330',
+        name: 'Sondeador Comedor 2',
         status: 'inactive',
-        signalStrength: 0,
         battery: 12,
         lastSeen: 'Hace 1 hora',
       },
@@ -129,13 +123,12 @@ const mockZones: Zone[] = [
     id: '4',
     name: 'Pastizal Sur',
     type: 'pasture',
-    cattleCount: 1,
     beacons: [
       {
         id: 'b6',
         deviceId: 'BLE-23326',
+        name: 'Sondeador Sur',
         status: 'active',
-        signalStrength: 90,
         battery: 91,
         lastSeen: 'Hace 2 min',
       },
@@ -144,10 +137,10 @@ const mockZones: Zone[] = [
 ]
 
 const zoneTypeConfig = {
-  pasture: { color: 'text-green-500', bgColor: 'bg-green-500/10', label: 'Pastizal' },
-  stable: { color: 'text-blue-500', bgColor: 'bg-blue-500/10', label: 'Establo' },
-  feeding: { color: 'text-amber-500', bgColor: 'bg-amber-500/10', label: 'Alimentación' },
-  water: { color: 'text-cyan-500', bgColor: 'bg-cyan-500/10', label: 'Agua' },
+  pasture: { color: 'text-primary', bgColor: 'bg-primary/10', label: 'Pastizal' },
+  stable: { color: 'text-primary', bgColor: 'bg-primary/10', label: 'Establo' },
+  feeding: { color: 'text-primary', bgColor: 'bg-primary/10', label: 'Alimentación' },
+  water: { color: 'text-primary', bgColor: 'bg-primary/10', label: 'Agua' },
 }
 
 const zones = ref<Zone[]>(mockZones)
@@ -162,7 +155,7 @@ const selectedZone = ref<Zone | null>(null)
 const selectedBeacon = ref<{ zoneId: string; beacon: Beacon } | null>(null)
 
 const zoneFormData = ref<{ name: string; type: Zone['type'] }>({ name: '', type: 'pasture' })
-const beaconFormData = ref<{ deviceId: string; zoneId: string }>({ deviceId: '', zoneId: '' })
+const beaconFormData = ref<{ deviceId: string; name: string; zoneId: string }>({ deviceId: '', name:'', zoneId: '' })
 
 const totalZones = computed(() => zones.value.length)
 const totalBeacons = computed(() => zones.value.reduce((acc, z) => acc + z.beacons.length, 0))
@@ -183,7 +176,6 @@ const handleAddZone = () => {
     name: zoneFormData.value.name,
     type: zoneFormData.value.type,
     beacons: [],
-    cattleCount: 0,
   }
   zones.value = [...zones.value, newZone]
   addZoneDialogOpen.value = false
@@ -194,8 +186,8 @@ const handleAddBeacon = () => {
   const newBeacon: Beacon = {
     id: `b${Date.now()}`,
     deviceId: beaconFormData.value.deviceId,
+    name: beaconFormData.value.name,
     status: 'active',
-    signalStrength: 100,
     battery: 100,
     lastSeen: 'Ahora',
   }
@@ -203,7 +195,7 @@ const handleAddBeacon = () => {
     z.id === beaconFormData.value.zoneId ? { ...z, beacons: [...z.beacons, newBeacon] } : z,
   )
   addBeaconDialogOpen.value = false
-  beaconFormData.value = { deviceId: '', zoneId: '' }
+  beaconFormData.value = { deviceId: '', name: '', zoneId: '' }
 }
 
 const handleEditZone = () => {
@@ -223,14 +215,14 @@ const handleEditBeacon = () => {
       ? {
           ...z,
           beacons: z.beacons.map((b) =>
-            b.id === selectedBeacon.value!.beacon.id ? { ...b, deviceId: beaconFormData.value.deviceId } : b,
+            b.id === selectedBeacon.value!.beacon.id ? { ...b, deviceId: beaconFormData.value.deviceId, name: beaconFormData.value.name } : b,
           ),
         }
       : z,
   )
   editBeaconDialogOpen.value = false
   selectedBeacon.value = null
-  beaconFormData.value = { deviceId: '', zoneId: '' }
+  beaconFormData.value = { deviceId: '', name: '', zoneId: '' }
 }
 
 const handleDeleteZone = () => {
@@ -269,7 +261,7 @@ const openAddBeaconDialog = (zoneId: string) => {
 
 const openEditBeaconDialog = (zoneId: string, beacon: Beacon) => {
   selectedBeacon.value = { zoneId, beacon }
-  beaconFormData.value = { deviceId: beacon.deviceId, zoneId }
+  beaconFormData.value = { deviceId: beacon.deviceId, name: beacon.name, zoneId }
   editBeaconDialogOpen.value = true
 }
 
@@ -326,7 +318,7 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
       <Card>
         <CardContent class="p-4">
           <div class="flex items-center justify-between">
-            <div>
+            <div> 
               <p class="text-xs font-medium text-muted-foreground">Activos</p>
               <p class="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{{ activeBeacons }}</p>
             </div>
@@ -339,7 +331,7 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
 
       <Card>
         <CardContent class="p-4">
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between"> 
             <div>
               <p class="text-xs font-medium text-muted-foreground">Advertencias</p>
               <p class="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{{ warningBeacons }}</p>
@@ -384,7 +376,7 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
                   <div class="flex-1 min-w-0">
                     <CardTitle class="text-lg font-semibold truncate">{{ zone.name }}</CardTitle>
                     <CardDescription class="text-xs">
-                      {{ zone.beacons.length }} sondeador{{ zone.beacons.length !== 1 ? 'es' : '' }} • {{ zone.cattleCount }} animal{{ zone.cattleCount !== 1 ? 'es' : '' }}
+                      {{ zone.beacons.length }} sondeador{{ zone.beacons.length !== 1 ? 'es' : '' }}
                     </CardDescription>
                   </div>
                 </button>
@@ -442,23 +434,28 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
                   <CardContent class="p-4">
                     <div class="flex items-start justify-between mb-3">
                       <div class="flex items-center gap-3">
-                        <div :class="cn('flex h-8 w-8 items-center justify-center rounded-lg', beacon.status === 'active' ? 'bg-green-500/10' : beacon.status === 'warning' ? 'bg-amber-500/10' : 'bg-destructive/10')">
-                          <Radio :class="cn('h-4 w-4', beacon.status === 'active' ? 'text-green-600 dark:text-green-400' : beacon.status === 'warning' ? 'text-amber-600 dark:text-amber-400' : 'text-destructive')" />
+                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                          <Radio class="h-4 w-4 text-primary" />
                         </div>
                         <div>
-                          <p class="font-semibold text-sm">ID: {{ beacon.deviceId }}</p>
+                          <p class="font-semibold text-sm">{{ beacon.name }}</p>
                           <p class="text-xs text-muted-foreground">{{ beacon.lastSeen }}</p>
                         </div>
                       </div>
 
                       <div class="flex items-center gap-1">
                         <Badge
-                          :variant="beacon.status === 'active' ? 'default' : beacon.status === 'warning' ? 'secondary' : 'destructive'"
-                          :class="cn('text-xs', beacon.status === 'active' && 'bg-green-500/10 text-green-700 border-green-500/20')"
+                          variant="outline"
+                          :class="cn(
+                            'text-xs',
+                            beacon.status === 'active' && 'bg-green-500/10 text-green-700 border-green-500/20',
+                            beacon.status === 'warning' && 'bg-amber-500/10 text-amber-700 border-amber-500/20',
+                            beacon.status === 'inactive' && 'bg-destructive/10 text-destructive border-destructive/20'
+                          )"
                         >
                           {{ beacon.status === 'active' ? 'Activo' : beacon.status === 'warning' ? 'Advertencia' : 'Inactivo' }}
                         </Badge>
-
+                        
                         <Button variant="ghost" size="icon" class="h-7 w-7" @click="openEditBeaconDialog(zone.id, beacon)">
                           <Pencil class="h-3 w-3" />
                         </Button>
@@ -469,35 +466,21 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
                       </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-3">
-                      <!-- Signal Strength -->
-                      <div class="space-y-1">
-                        <div class="flex items-center justify-between text-xs">
-                          <div class="flex items-center gap-1">
-                            <component :is="beacon.status === 'active' ? Wifi : beacon.status === 'warning' ? Signal : WifiOff" :class="cn('h-3 w-3', beacon.status === 'active' ? 'text-green-600 dark:text-green-400' : beacon.status === 'warning' ? 'text-amber-600 dark:text-amber-400' : 'text-destructive')" />
-                            <span class="text-muted-foreground">Señal</span>
-                          </div>
-                          <span class="font-semibold text-foreground">{{ beacon.signalStrength }}%</span>
+                    <!-- Battery -->
+                    <div class="space-y-1">
+                      <div class="flex items-center justify-between text-xs">
+                        <div class="flex items-center gap-1">
+                          <Zap class="h-3 w-3 text-muted-foreground" />
+                          <span class="text-muted-foreground">Batería</span>
                         </div>
-                        <Progress :modelValue="beacon.signalStrength" class="h-1.5" />
+                        <span :class="cn('font-semibold', beacon.battery > 50 ? 'text-green-600' : beacon.battery > 20 ? 'text-amber-600' : 'text-destructive')">
+                          {{ beacon.battery }}%
+                        </span>
                       </div>
-
-                      <!-- Battery -->
-                      <div class="space-y-1">
-                        <div class="flex items-center justify-between text-xs">
-                          <div class="flex items-center gap-1">
-                            <Zap class="h-3 w-3 text-muted-foreground" />
-                            <span class="text-muted-foreground">Batería</span>
-                          </div>
-                          <span :class="cn('font-semibold', beacon.battery > 50 ? 'text-green-600 dark:text-green-400' : beacon.battery > 20 ? 'text-amber-600 dark:text-amber-400' : 'text-destructive')">
-                            {{ beacon.battery }}%
-                          </span>
-                        </div>
-                        <Progress
-                          :modelValue="beacon.battery"
-                          :class="cn('h-1.5', beacon.battery > 50 ? '[&>div]:bg-green-600' : beacon.battery > 20 ? '[&>div]:bg-amber-600' : '[&>div]:bg-destructive')"
-                        />
-                      </div>
+                      <Progress
+                        :modelValue="beacon.battery"
+                        :class="cn('h-1.5', beacon.battery > 50 ? '[&>div]:bg-green-600' : beacon.battery > 20 ? '[&>div]:bg-amber-600' : '[&>div]:bg-destructive')"
+                      />
                     </div>
                   </CardContent>
                 </Card>
@@ -564,7 +547,11 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
 
         <div class="space-y-4 py-4">
           <div class="space-y-2">
-            <Label for="beacon-deviceId">ID del Dispositivo BLE</Label>
+            <Label for="beacon-name">Nombre del Dispositivo</Label>
+            <Input id="beacon-name" placeholder="Ej: Sondeador Norte" v-model="beaconFormData.name" />
+          </div>
+          <div class="space-y-2">
+            <Label for="beacon-deviceId">ID del Dispositivo</Label>
             <Input id="beacon-deviceId" placeholder="Ej: BLE-23323" v-model="beaconFormData.deviceId" />
             <p class="text-xs text-muted-foreground">Identificador único del sondeador para vincular a tu cuenta</p>
           </div>
@@ -619,13 +606,13 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Editar Sondeador</DialogTitle>
-          <DialogDescription>Modifica el ID del dispositivo BLE</DialogDescription>
+          <DialogDescription>Modifica el Nombre del dispositivo</DialogDescription>
         </DialogHeader>
 
         <div class="space-y-4 py-4">
           <div class="space-y-2">
-            <Label for="edit-beacon-deviceId">ID del Dispositivo BLE</Label>
-            <Input id="edit-beacon-deviceId" v-model="beaconFormData.deviceId" />
+            <Label for="edit-beacon-name">Nombre del Dispositivo</Label>
+            <Input id="edit-beacon-name" v-model="beaconFormData.name" />
           </div>
         </div>
 
@@ -659,7 +646,7 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
         <AlertDialogHeader>
           <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
           <AlertDialogDescription>
-            Esta acción eliminará permanentemente el sondeador "{{ selectedBeacon?.beacon.deviceId }}". Los datos históricos se conservarán pero el dispositivo dejará de monitorear.
+            Esta acción eliminará permanentemente el sondeador "{{ selectedBeacon?.beacon.name }}". Los datos históricos se conservarán pero el dispositivo dejará de monitorear.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
