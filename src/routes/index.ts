@@ -40,6 +40,11 @@ const routes: RouteRecordRaw[] = [
         name: 'Zones',
         component: () => import('../views/Dashboard/Zones.vue')
       },
+      {
+        path: 'cattle',
+        name: 'Cattle',
+        component: () => import('../views/Dashboard/Mi_ganado.vue')
+      },
     ]
   }
 ]
