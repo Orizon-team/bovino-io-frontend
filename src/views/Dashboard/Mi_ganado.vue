@@ -27,6 +27,7 @@ import {
 	DialogTitle,
 	DialogDescription,
 } from '@/components/ui/dialog'
+import { Progress } from '@/components/ui/progress'
 import {
 	AlertDialog,
 	AlertDialogContent,
@@ -53,15 +54,19 @@ type Cattle = {
 	zone: string | null
 	lastSeen: string
 	behaviorStats?: BehaviorStats
+	notes?: string
+	beacons?: string[]
 }
 
 const mockCattle: Cattle[] = [
 	{
 		id: 1,
 		tag: 'El Pinto',
-		image: '/brown-and-white-spotted-cow.jpg',
+		image: '/images/Vaca.jpeg',
 		zone: 'Establo A',
 		lastSeen: 'Hace 2 minutos',
+		notes: 'Ganado tranquilo, sin observaciones',
+		beacons: ['BCN-001'],
 		behaviorStats: {
 			mostVisitedZones: [
 				{ zone: 'Establo A', percentage: 45, visits: 28 },
@@ -84,9 +89,11 @@ const mockCattle: Cattle[] = [
 	{
 		id: 2,
 		tag: 'La Manchada',
-		image: '/black-and-white-dairy-cow.jpg',
+		image: '/images/Vaca.jpeg',
 		zone: 'Pastizal Norte',
 		lastSeen: 'Hace 5 minutos',
+		notes: '',
+		beacons: [],
 		behaviorStats: {
 			mostVisitedZones: [
 				{ zone: 'Pastizal Norte', percentage: 55, visits: 35 },
@@ -109,9 +116,11 @@ const mockCattle: Cattle[] = [
 	{
 		id: 3,
 		tag: 'El Toro',
-		image: '/brown-bull.jpg',
+		image: '/images/Vaca.jpeg',
 		zone: 'Área de Alimentación',
 		lastSeen: 'Hace 1 minuto',
+		notes: '',
+		beacons: [],
 		behaviorStats: {
 			mostVisitedZones: [
 				{ zone: 'Área de Alimentación', percentage: 40, visits: 25 },
@@ -131,13 +140,15 @@ const mockCattle: Cattle[] = [
 			],
 		},
 	},
-	{ id: 4, tag: 'La Negra', image: '/black-cow.png', zone: null, lastSeen: 'Hace 45 minutos' },
+	{ id: 4, tag: 'La Negra', image: '/images/Vaca.jpeg', zone: null, lastSeen: 'Hace 45 minutos', notes: '', beacons: [] },
 	{
 		id: 5,
 		tag: 'El Colorado',
-		image: '/red-brown-cow.jpg',
+		image: '/images/Vaca.jpeg',
 		zone: 'Pastizal Sur',
 		lastSeen: 'Hace 3 minutos',
+		notes: '',
+		beacons: [],
 		behaviorStats: {
 			mostVisitedZones: [
 				{ zone: 'Pastizal Sur', percentage: 60, visits: 38 },
@@ -160,9 +171,11 @@ const mockCattle: Cattle[] = [
 	{
 		id: 6,
 		tag: 'La Blanca',
-		image: '/white-cow.jpg',
+		image: '/images/Vaca.jpeg',
 		zone: 'Establo B',
 		lastSeen: 'Hace 8 minutos',
+		notes: '',
+		beacons: [],
 		behaviorStats: {
 			mostVisitedZones: [
 				{ zone: 'Establo B', percentage: 50, visits: 31 },
@@ -182,13 +195,15 @@ const mockCattle: Cattle[] = [
 			],
 		},
 	},
-	{ id: 7, tag: 'El Chico', image: '/young-brown-calf.jpg', zone: null, lastSeen: 'Hace 1 hora' },
+	{ id: 7, tag: 'El Chico', image: '/images/Vaca.jpeg', zone: null, lastSeen: 'Hace 1 hora', notes: '', beacons: [] },
 	{
 		id: 8,
 		tag: 'La Grande',
-		image: '/large-dairy-cow.jpg',
+		image: '/images/Vaca.jpeg',
 		zone: 'Pastizal Norte',
 		lastSeen: 'Hace 4 minutos',
+		notes: '',
+		beacons: [],
 		behaviorStats: {
 			mostVisitedZones: [
 				{ zone: 'Pastizal Norte', percentage: 48, visits: 30 },
@@ -229,8 +244,31 @@ const cattleToDelete = ref<Cattle | null>(null)
 const zones = computed(() => Array.from(new Set(cattleList.value.filter((c) => c.zone).map((c) => c.zone as string))) as string[])
 
 // temp state for add / edit dialogs (avoid nullable types in v-models)
-const tempAdd = reactive({ tag: '', image: '', zone: '' })
-const editTemp = reactive({ id: 0, tag: '', image: '', zone: '' })
+const tempAdd = reactive({ tag: '', image: '', zone: '', notes: '', beacons: [] as string[] })
+const editTemp = reactive({ id: 0, tag: '', image: '', zone: '', notes: '', beacons: [] as string[] })
+
+// validation state
+const addErrors = reactive({ tag: '', image: '' })
+const editErrors = reactive({ tag: '', image: '' })
+
+const validateImageUrl = (url?: string) => {
+	if (!url) return true
+	// allow relative paths starting with / or simple http(s) urls
+	return /^\/|^https?:\/\//.test(url)
+}
+
+const isDuplicateTag = (tag: string, excludeId?: number) => {
+	if (!tag) return false
+	return cattleList.value.some((c) => c.tag.toLowerCase() === tag.toLowerCase() && c.id !== excludeId)
+}
+
+const canAdd = computed(() => {
+	return tempAdd.tag.trim().length > 0 && validateImageUrl(tempAdd.image) && !isDuplicateTag(tempAdd.tag)
+})
+
+const canSaveEdit = computed(() => {
+	return editTemp.id !== 0 && editTemp.tag.trim().length > 0 && validateImageUrl(editTemp.image) && !isDuplicateTag(editTemp.tag, editTemp.id)
+})
 
 onMounted(() => {
 	const filter = route.query.filter as string | undefined
@@ -264,7 +302,7 @@ const filteredCattle = computed(() => {
 
 const handleAddCattle = (newCattle: Partial<Cattle>) => {
 	const id = Math.max(...cattleList.value.map((c) => c.id), 0) + 1
-	cattleList.value = [...cattleList.value, { id, tag: newCattle.tag || `Ganado ${id}`, image: newCattle.image || null, zone: newCattle.zone ?? null, lastSeen: 'Recién agregado' } as Cattle]
+	cattleList.value = [...cattleList.value, { id, tag: newCattle.tag || `Ganado ${id}`, image: newCattle.image || null, zone: newCattle.zone ?? null, lastSeen: 'Recién agregado', notes: (newCattle.notes as string) || '', beacons: (newCattle.beacons as string[]) || [] } as Cattle]
 	addDialogOpen.value = false
 }
 
@@ -280,6 +318,8 @@ const handleEditCattle = (cattle: Cattle) => {
 	editTemp.tag = cattle.tag
 	editTemp.image = cattle.image ?? ''
 	editTemp.zone = cattle.zone ?? ''
+	editTemp.notes = cattle.notes ?? ''
+	editTemp.beacons = cattle.beacons ? [...cattle.beacons] : []
 	editDialogOpen.value = true
 }
 
@@ -288,16 +328,83 @@ const handleDeleteCattle = (cattle: Cattle) => {
 	deleteDialogOpen.value = true
 }
 
+
 const saveEditFromTemp = () => {
-	const id = editTemp.id
-	cattleList.value = cattleList.value.map((c) => (c.id === id ? { ...c, tag: editTemp.tag, image: editTemp.image || null, zone: editTemp.zone || null } : c))
+	// clear previous errors
+	editErrors.tag = ''
+	editErrors.image = ''
+
+	if (!editTemp.tag || editTemp.tag.trim() === '') {
+		editErrors.tag = 'El nombre es requerido'
+	}
+	if (!validateImageUrl(editTemp.image)) {
+		editErrors.image = 'URL de imagen inválida'
+	}
+	if (isDuplicateTag(editTemp.tag, editTemp.id)) {
+		editErrors.tag = 'Ya existe un animal con este nombre'
+	}
+
+	if (editErrors.tag || editErrors.image) return
+
+		const id = editTemp.id
+		cattleList.value = cattleList.value.map((c) => (c.id === id ? { ...c, tag: editTemp.tag, image: editTemp.image || null, zone: editTemp.zone || null, notes: editTemp.notes || '', beacons: editTemp.beacons ? [...editTemp.beacons] : [] } : c))
 	editDialogOpen.value = false
 	cattleToEdit.value = null
 	editTemp.id = 0
 	editTemp.tag = ''
 	editTemp.image = ''
 	editTemp.zone = ''
+		editTemp.notes = ''
+		editTemp.beacons = []
 }
+
+const handleConfirmAdd = () => {
+	// clear errors
+	addErrors.tag = ''
+	addErrors.image = ''
+
+	if (!tempAdd.tag || tempAdd.tag.trim() === '') addErrors.tag = 'El nombre es requerido'
+	if (!validateImageUrl(tempAdd.image)) addErrors.image = 'URL de imagen inválida'
+	if (isDuplicateTag(tempAdd.tag)) addErrors.tag = 'Ya existe un animal con este nombre'
+
+	if (addErrors.tag || addErrors.image) return
+
+		handleAddCattle(tempAdd)
+		// reset
+		tempAdd.tag = ''
+		tempAdd.image = ''
+		tempAdd.zone = ''
+		tempAdd.notes = ''
+		tempAdd.beacons = []
+}
+
+	// beacon helpers for edit dialog
+	const editBeaconInput = ref('')
+	const addBeaconToEdit = () => {
+		const v = editBeaconInput.value.trim()
+		if (!v) return
+		if (!editTemp.beacons) editTemp.beacons = []
+		if (!editTemp.beacons.includes(v)) editTemp.beacons.push(v)
+		editBeaconInput.value = ''
+	}
+	const removeBeaconFromEdit = (idx: number) => {
+		if (!editTemp.beacons) return
+		editTemp.beacons.splice(idx, 1)
+	}
+
+	// beacon helpers for add dialog
+	const addBeaconInput = ref('')
+	const addBeaconToTemp = () => {
+		const v = addBeaconInput.value.trim()
+		if (!v) return
+		if (!tempAdd.beacons) tempAdd.beacons = []
+		if (!tempAdd.beacons.includes(v)) tempAdd.beacons.push(v)
+		addBeaconInput.value = ''
+	}
+	const removeBeaconFromTemp = (idx: number) => {
+		if (!tempAdd.beacons) return
+		tempAdd.beacons.splice(idx, 1)
+	}
 
 const handleConfirmDelete = () => {
 	if (cattleToDelete.value) {
@@ -316,7 +423,7 @@ const handleConfirmDelete = () => {
 				<h1 class="text-3xl font-bold text-foreground">Mi Ganadería</h1>
 				<p class="text-muted-foreground mt-1">Gestiona y monitorea todos tus animales ({{ cattleList.length }} registrados)</p>
 			</div>
-			<Button @click="addDialogOpen = true" size="lg" class="gap-2">
+			<Button @click="addDialogOpen = true" size="lg" class="gap-2 bg-emerald-600 text-white hover:bg-emerald-700" >
 				<Plus class="h-5 w-5" />
 				Agregar Ganado
 			</Button>
@@ -365,28 +472,43 @@ const handleConfirmDelete = () => {
 		</div>
 
 		<div v-else-if="viewMode === 'grid'" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-			<Card v-for="cattle in filteredCattle" :key="cattle.id" class="cursor-pointer hover:shadow-md transition-shadow" @click="handleCattleClick(cattle)">
-				<CardContent class="p-4">
-					<div class="flex flex-col items-start gap-3">
-						<img :src="cattle.image || '/placeholder.svg'" :alt="cattle.tag" class="h-36 w-full rounded-md object-cover" />
-						<div class="w-full flex items-center justify-between">
-							<div>
+			<Card
+				v-for="cattle in filteredCattle"
+				:key="cattle.id"
+				@click="handleCattleClick(cattle)"
+				:class="`transition-shadow cursor-pointer hover:shadow-md ${cattle.zone ? 'border border-gray-100 rounded-lg' : 'border border-red-200 rounded-lg ring-1 ring-red-50'}`"
+			>
+				<CardContent class="p-0 overflow-hidden">
+					<div class="flex flex-col items-start gap-0">
+						<!-- image area with optional overlay when offline -->
+						<div class="relative w-full">
+							<img :src="cattle.image || '/images/Vaca.jpeg'" :alt="cattle.tag" class="h-44 w-full object-cover" />
+							<!-- overlay for no-signal -->
+							<div v-if="!cattle.zone" class="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center">
+								<Badge variant="destructive" class="px-3 py-2 text-sm">Sin Señal</Badge>
+							</div>
+						</div>
+
+						<div class="w-full p-4 flex items-start justify-between">
+							<div class="min-w-0">
+								<div class="flex items-center gap-2 mb-1">
+									<span class="text-sm font-bold text-foreground">ID: {{ cattle.id }}</span>
+								</div>
 								<h3 class="font-semibold text-lg text-foreground truncate">{{ cattle.tag }}</h3>
-								<div class="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-									<div v-if="cattle.zone" class="flex items-center gap-1">
-										<MapPin class="h-4 w-4 text-primary" />
-										<span>{{ cattle.zone }}</span>
-									</div>
-									<div v-else class="flex items-center gap-1 text-destructive">
-										<AlertTriangle class="h-4 w-4" />
-										<span class="font-medium">Sin señal</span>
-									</div>
+								<div class="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+									<template v-if="cattle.zone">
+										<Badge class="bg-primary/10 text-primary px-2 py-1">{{ cattle.zone }}</Badge>
+										<span class="ml-2">Última vez: {{ cattle.lastSeen }}</span>
+									</template>
+									<template v-else>
+										<span class="text-destructive font-medium">Sin señal • {{ cattle.lastSeen }}</span>
+									</template>
 								</div>
 							</div>
 
 							<div class="flex flex-col items-end gap-2">
 								<Badge v-if="cattle.zone" class="bg-primary/10 text-primary">En línea</Badge>
-								<Badge v-else variant="destructive">Sin señal</Badge>
+								<Badge v-else variant="destructive">Desconocido</Badge>
 								<div class="flex gap-1 mt-2">
 									<Button variant="ghost" size="icon" @click.stop.prevent="handleEditCattle(cattle)">
 										<Pencil class="h-4 w-4" />
@@ -405,7 +527,7 @@ const handleConfirmDelete = () => {
 		<div v-else class="space-y-3">
 			<Card v-for="cattle in filteredCattle" :key="cattle.id" class="p-4 hover:shadow-md transition-shadow cursor-pointer" @click="handleCattleClick(cattle)">
 				<div class="flex items-center gap-4">
-					  <img :src="cattle.image || '/placeholder.svg'" :alt="cattle.tag" class="h-16 w-16 rounded-lg object-cover shrink-0" />
+					  <img :src="cattle.image || '/images/Vaca.jpeg'" :alt="cattle.tag" class="h-16 w-16 rounded-lg object-cover shrink-0" />
 
 					<div class="flex-1 min-w-0">
 						<div class="flex items-center gap-2 mb-1">
@@ -448,43 +570,126 @@ const handleConfirmDelete = () => {
 		</div>
 
 		<!-- Modals -->
-		<Dialog v-model:open="detailModalOpen">
-			<DialogContent>
-				<DialogHeader>
-					<DialogTitle>Detalle del Animal</DialogTitle>
-					<DialogDescription>Información detallada del animal seleccionado</DialogDescription>
-				</DialogHeader>
+				<Dialog v-model:open="detailModalOpen">
+					<DialogContent :showCloseButton="false" class="max-w-4xl p-6 rounded-lg bg-white shadow-lg">
+					<div class="relative">
 
-				<div class="py-4">
-					<template v-if="selectedCattle">
-						<div class="flex gap-4">
-							<img :src="selectedCattle.image || '/placeholder.svg'" :alt="selectedCattle.tag" class="h-36 w-36 rounded-md object-cover" />
-							<div class="flex-1">
-								<h3 class="text-xl font-bold">{{ selectedCattle.tag }}</h3>
-								<p class="text-sm text-muted-foreground">ID: {{ selectedCattle.id }}</p>
-								<p class="mt-2">{{ selectedCattle.behaviorStats?.activityPattern || 'Sin datos de actividad' }}</p>
-								<div class="mt-3 space-y-2 text-sm">
-									<div v-if="selectedCattle.behaviorStats?.mostVisitedZones">
-										<h4 class="font-medium">Zonas más visitadas</h4>
-										<ul class="list-disc list-inside">
-											<li v-for="(z, i) in selectedCattle.behaviorStats!.mostVisitedZones!" :key="i">{{ z.zone }} — {{ z.percentage }}% ({{ z.visits }} visitas)</li>
-										</ul>
+						<!-- Header row: image left + title/info right -->
+						<div class="grid grid-cols-1 gap-6 md:grid-cols-3 items-start">
+							<div class="md:col-span-1 flex items-start gap-4">
+								<img :src="selectedCattle?.image || '/images/Vaca.jpeg'" :alt="selectedCattle?.tag" class="w-44 h-36 rounded-lg object-cover" />
+								<div class="hidden md:block">
+									<!-- spacer to align with right column on md+ screens -->
+								</div>
+							</div>
+
+										<div class="md:col-span-2">
+											<div class="flex flex-col md:flex-row md:items-start md:justify-between">
+																<div class="max-w-lg">
+																	<h3 class="text-3xl font-extrabold leading-tight">ID: {{ selectedCattle?.id }}</h3>
+																	<p class="text-xl font-semibold mt-1">{{ selectedCattle?.tag }}</p>
+																</div>
+									<div class="mt-3 md:mt-0 flex flex-col gap-2">
+										<div class="flex items-center gap-2">
+											<span class="text-sm text-muted-foreground">Ubicación Actual:</span>
+											<div class="flex items-center gap-2">
+												  <MapPin class="h-4 w-4 text-primary" />
+												  <Badge class="bg-primary/10 text-primary px-2 py-1">{{ selectedCattle?.zone || 'Sin ubicación' }}</Badge>
+											</div>
+										</div>
+
+										<div class="flex items-center gap-2">
+											<div class="text-sm text-muted-foreground">Última detección:</div>
+											<div class="text-sm font-medium">{{ selectedCattle?.lastSeen }}</div>
+										</div>
+
+										<div class="flex items-center gap-2">
+											<div class="text-sm text-muted-foreground">Estado:</div>
+											<Badge class="bg-green-100 text-green-700 px-2 py-1">{{ selectedCattle?.zone ? 'Monitoreado' : 'Sin señal' }}</Badge>
+										</div>
 									</div>
 								</div>
 							</div>
 						</div>
-					</template>
-					<template v-else>
-						<p>No hay animal seleccionado</p>
-					</template>
-				</div>
 
-						<DialogFooter>
-							<Button variant="outline" @click="detailModalOpen = false">Cerrar</Button>
-							<Button v-if="selectedCattle" @click="() => { if (selectedCattle) { handleEditCattle(selectedCattle); detailModalOpen = false } }">Editar</Button>
-						</DialogFooter>
-			</DialogContent>
-		</Dialog>
+						<!-- Zones card full width -->
+						<div class="mt-6">
+							<Card class="rounded-lg">
+								<CardContent>
+									<div class="flex items-center gap-2 mb-3">
+										<MapPin class="h-5 w-5 text-primary" />
+										<h4 class="text-lg font-medium">Zonas Más Visitadas</h4>
+									</div>
+
+									<div class="space-y-4">
+										<template v-for="(z) in selectedCattle?.behaviorStats?.mostVisitedZones || []" :key="z.zone">
+											<div class="flex items-center justify-between">
+												<div class="text-sm font-medium">{{ z.zone }}</div>
+												<div class="text-sm text-muted-foreground">{{ z.percentage }}% ({{ z.visits }} visitas)</div>
+											</div>
+											<Progress :modelValue="z.percentage" class="h-3 rounded-full [&>div]:bg-emerald-700 [&>div]:rounded-full" />
+										</template>
+									</div>
+								</CardContent>
+							</Card>
+						</div>
+
+						<!-- Two info cards -->
+						<div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+							<Card>
+								<CardContent class="p-6">
+									<div class="text-sm text-muted-foreground">Consumo de Agua</div>
+									<div class="text-2xl font-bold mt-3">{{ selectedCattle?.behaviorStats?.waterFrequency || 'N/D' }}</div>
+									<div class="text-xs text-muted-foreground mt-1">Frecuencia promedio</div>
+								</CardContent>
+							</Card>
+
+							<Card>
+								<CardContent class="p-6">
+									<div class="text-sm text-muted-foreground">Preferencia de Alimentación</div>
+									<div class="mt-3 space-y-2">
+										<template v-for="(p) in selectedCattle?.behaviorStats?.feedingPreference || []" :key="p.type">
+											<div class="flex items-center justify-between text-sm">
+												<div>{{ p.type }}</div>
+												<div class="font-medium">{{ p.percentage }}%</div>
+											</div>
+										</template>
+									</div>
+								</CardContent>
+							</Card>
+						</div>
+
+						<!-- Beacons / Notas -->
+						<div class="mt-6 grid grid-cols-1 gap-4">
+							<Card>
+								<CardContent class="p-6">
+									<div class="flex items-center justify-between">
+										<div>
+											<div class="text-sm text-muted-foreground">Beacons asignados</div>
+											<div class="mt-2 flex gap-2 flex-wrap">
+												<template v-for="b in selectedCattle?.beacons || []" :key="b">
+													<span class="inline-flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-md text-sm">{{ b }}</span>
+												</template>
+												<template v-if="!(selectedCattle?.beacons && selectedCattle.beacons.length)">
+												<span class="text-sm text-muted-foreground">No hay beacons asignados</span>
+												</template>
+											</div>
+										</div>
+									</div>
+									<div class="mt-3 text-sm text-muted-foreground">Notas</div>
+									<div class="mt-2">{{ selectedCattle?.notes || 'Sin notas' }}</div>
+								</CardContent>
+							</Card>
+						</div>
+
+						<!-- Footer buttons aligned right -->
+						<div class="mt-6 flex justify-end gap-3">
+							<Button variant="ghost" @click="detailModalOpen = false">Cerrar</Button>
+							<Button variant="secondary" class="bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-2 rounded-md" v-if="selectedCattle" @click="() => { if (selectedCattle) { handleEditCattle(selectedCattle); detailModalOpen = false } }">Editar</Button>
+						</div>
+					</div>
+				</DialogContent>
+			</Dialog>
 
 		<!-- Add Dialog -->
 		<Dialog v-model:open="addDialogOpen">
@@ -494,15 +699,37 @@ const handleConfirmDelete = () => {
 					<DialogDescription>Registra un nuevo animal</DialogDescription>
 				</DialogHeader>
 
-				<div class="py-4 space-y-3">
-					<Input v-model="tempAdd.tag" placeholder="Nombre / Apodo" />
-					<Input v-model="tempAdd.image" placeholder="URL de imagen (opcional)" />
-					<Input v-model="tempAdd.zone" placeholder="Zona (opcional)" />
-				</div>
+					<div class="py-4 space-y-3">
+						<div>
+							<label class="block text-sm font-medium">Nombre / Tag <span class="text-destructive">*</span></label>
+							<Input v-model="tempAdd.tag" placeholder="Nombre / Apodo" />
+							<div v-if="addErrors.tag" class="text-destructive text-sm mt-1">{{ addErrors.tag }}</div>
+						</div>
+						<div>
+							<label class="block text-sm font-medium">Imagen del Animal</label>
+							<Input v-model="tempAdd.image" placeholder="URL de imagen (opcional)" />
+							<div v-if="addErrors.image" class="text-destructive text-sm mt-1">{{ addErrors.image }}</div>
+						</div>
+						<Input v-model="tempAdd.zone" placeholder="Zona (opcional)" />
+						<!-- beacons area for add -->
+						<label class="block text-sm font-medium mt-2">Beacons</label>
+						<div class="flex gap-2 mt-2">
+							<input v-model="addBeaconInput" placeholder="Agregar beacon (ID)" class="flex-1 rounded-md border p-2" />
+							<button @click.prevent="addBeaconToTemp" class="px-3 py-2 bg-primary text-white rounded-md">Agregar</button>
+						</div>
+						<div class="flex gap-2 flex-wrap mt-2">
+							<span v-for="(b, idx) in tempAdd.beacons" :key="b" class="inline-flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-md text-sm">
+								{{ b }}
+								<button @click.prevent="removeBeaconFromTemp(idx)" class="ml-1 text-sm text-destructive">✕</button>
+							</span>
+						</div>
+						<label class="block text-sm font-medium mt-3">Notas Adicionales</label>
+						<textarea v-model="tempAdd.notes" placeholder="Información adicional sobre el animal..." class="w-full rounded-md border p-3 h-24"></textarea>
+					</div>
 
 				<DialogFooter>
 					<Button variant="outline" @click="addDialogOpen = false">Cancelar</Button>
-					<Button :disabled="!tempAdd.tag" @click="() => { handleAddCattle(tempAdd); tempAdd.tag=''; tempAdd.image=''; tempAdd.zone=''; }">Agregar</Button>
+					<Button :disabled="!canAdd" @click="handleConfirmAdd" class="bg-emerald-600 text-white hover:bg-emerald-700">Agregar</Button>
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
@@ -515,18 +742,52 @@ const handleConfirmDelete = () => {
 					<DialogDescription>Modifica la información del animal</DialogDescription>
 				</DialogHeader>
 
-						<div class="py-4 space-y-3">
-							<template v-if="editTemp.id !== 0">
-								<Input v-model="editTemp.tag" placeholder="Nombre / Apodo" />
-								<Input v-model="editTemp.image" placeholder="URL de imagen (opcional)" />
-								<Input v-model="editTemp.zone" placeholder="Zona (opcional)" />
-							</template>
-						</div>
+							<div class="py-4 space-y-3">
+								<template v-if="editTemp.id !== 0">
+									<!-- Nombre / Tag -->
+									<label class="block text-sm font-medium">Nombre / Tag <span class="text-destructive">*</span></label>
+									<Input v-model="editTemp.tag" placeholder="Nombre / Apodo" />
+									<div v-if="editErrors.tag" class="text-destructive text-sm mt-1">{{ editErrors.tag }}</div>
 
-						<DialogFooter>
-							<Button variant="outline" @click="editDialogOpen = false">Cancelar</Button>
-							<Button v-if="editTemp.id !== 0" @click="saveEditFromTemp">Guardar</Button>
-						</DialogFooter>
+									<!-- ID (no editable) -->
+									<label class="block text-sm font-medium mt-3">ID del Animal</label>
+									<input class="w-full rounded-md border p-2 bg-muted text-sm" :value="editTemp.id" disabled />
+									<div class="text-xs text-muted-foreground mt-1">El ID no se puede modificar</div>
+
+									<!-- Zona -->
+									<label class="block text-sm font-medium mt-3">Zona Actual <span class="text-destructive">*</span></label>
+									<Input v-model="editTemp.zone" placeholder="Zona (opcional)" />
+
+									<!-- Imagen preview con boton eliminar -->
+									<label class="block text-sm font-medium mt-3">Imagen del Animal</label>
+									<div class="relative mt-2">
+										<img :src="editTemp.image || '/images/Vaca.jpeg'" alt="preview" class="w-full h-40 object-cover rounded-lg" />
+										<button @click.prevent="editTemp.image = ''" class="absolute right-3 top-3 h-8 w-8 rounded-full bg-destructive text-white flex items-center justify-center">×</button>
+									</div>
+
+									<!-- Beacons: show existing and add new -->
+									<label class="block text-sm font-medium mt-3">Beacons</label>
+									<div class="flex items-center gap-2 mt-2">
+										<input v-model="editBeaconInput" placeholder="Agregar beacon (ID)" class="flex-1 rounded-md border p-2" />
+										<button @click.prevent="addBeaconToEdit" class="px-3 py-2 bg-primary text-white rounded-md">Agregar</button>
+									</div>
+									<div class="flex gap-2 flex-wrap mt-2">
+										<span v-for="(b, idx) in editTemp.beacons" :key="b" class="inline-flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-md text-sm">
+											{{ b }}
+											<button @click.prevent="removeBeaconFromEdit(idx)" class="ml-1 text-sm text-destructive">✕</button>
+										</span>
+									</div>
+
+									<!-- Notas adicionales -->
+									<label class="block text-sm font-medium mt-3">Notas Adicionales</label>
+									<textarea v-model="editTemp.notes" placeholder="Información adicional sobre el animal..." class="w-full rounded-md border p-3 h-28"></textarea>
+								</template>
+							</div>
+
+							<DialogFooter>
+								<Button variant="outline" @click="editDialogOpen = false">Cancelar</Button>
+								<Button :disabled="!canSaveEdit" v-if="editTemp.id !== 0" @click="saveEditFromTemp" class="bg-emerald-600 text-white hover:bg-emerald-700">Guardar</Button>
+							</DialogFooter>
 			</DialogContent>
 		</Dialog>
 
