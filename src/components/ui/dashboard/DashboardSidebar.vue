@@ -52,6 +52,7 @@ const getButtonClass = (href: string) => {
 }
 
 const handleLogout = () => {
+  localStorage.clear()
   router.push('/')
 }
 
@@ -66,7 +67,6 @@ const handleSettings = () => {
 
 <template>
   <div class="flex h-full w-64 flex-col border-r border-border bg-card">
-    <!-- Logo Section -->
     <div class="flex h-16 items-center gap-2 border-b border-border px-6">
       <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
         <Beef class="h-6 w-6 text-primary-foreground" />
@@ -77,7 +77,6 @@ const handleSettings = () => {
       </div>
     </div>
 
-    <!-- Navigation -->
     <nav class="flex-1 space-y-1 p-4">
       <div class="space-y-1">
         <RouterLink
@@ -99,7 +98,6 @@ const handleSettings = () => {
       </div>
     </nav>
 
-    <!-- Settings - positioned above user section -->
     <div class="p-4 pt-0">
       <RouterLink to="/dashboard/settings" custom v-slot="{ navigate }">
         <Button
@@ -113,7 +111,6 @@ const handleSettings = () => {
       </RouterLink>
     </div>
 
-    <!-- User Section with Dropdown -->
     <div class="border-t border-border p-4">
       <DropdownMenu>
         <DropdownMenuTrigger>
