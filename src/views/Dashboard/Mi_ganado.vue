@@ -248,13 +248,13 @@ const tempAdd = reactive({ tag: '', image: '', zone: '', notes: '', beacons: [] 
 const editTemp = reactive({ id: 0, tag: '', image: '', zone: '', notes: '', beacons: [] as string[] })
 
 // validation state
-const addErrors = reactive({ tag: '', image: '' })
+const addErrors = reactive({ tag: '', image: '', zone: '' })
 const editErrors = reactive({ tag: '', image: '' })
 
 const validateImageUrl = (url?: string) => {
 	if (!url) return true
-	// allow relative paths starting with / or simple http(s) urls
-	return /^\/|^https?:\/\//.test(url)
+	// allow relative paths starting with /, http(s), blob or data URLs (for local file previews)
+	return /^\/|^https?:\/\/|^blob:|^data:/.test(url)
 }
 
 const isDuplicateTag = (tag: string, excludeId?: number) => {
@@ -263,7 +263,13 @@ const isDuplicateTag = (tag: string, excludeId?: number) => {
 }
 
 const canAdd = computed(() => {
-	return tempAdd.tag.trim().length > 0 && validateImageUrl(tempAdd.image) && !isDuplicateTag(tempAdd.tag)
+	// require name and a selected zone; image optional (can be blob/data/http or empty)
+	return (
+		tempAdd.tag.trim().length > 0 &&
+		tempAdd.zone &&
+		validateImageUrl(tempAdd.image) &&
+		!isDuplicateTag(tempAdd.tag)
+	)
 })
 
 const canSaveEdit = computed(() => {
@@ -363,9 +369,10 @@ const handleConfirmAdd = () => {
 	addErrors.tag = ''
 	addErrors.image = ''
 
-	if (!tempAdd.tag || tempAdd.tag.trim() === '') addErrors.tag = 'El nombre es requerido'
-	if (!validateImageUrl(tempAdd.image)) addErrors.image = 'URL de imagen inválida'
-	if (isDuplicateTag(tempAdd.tag)) addErrors.tag = 'Ya existe un animal con este nombre'
+		if (!tempAdd.tag || tempAdd.tag.trim() === '') addErrors.tag = 'El nombre es requerido'
+		if (!tempAdd.zone || tempAdd.zone === '') addErrors.zone = 'La zona inicial es requerida'
+		if (!validateImageUrl(tempAdd.image)) addErrors.image = 'URL de imagen inválida'
+		if (isDuplicateTag(tempAdd.tag)) addErrors.tag = 'Ya existe un animal con este nombre'
 
 	if (addErrors.tag || addErrors.image) return
 
@@ -377,6 +384,21 @@ const handleConfirmAdd = () => {
 		tempAdd.notes = ''
 		tempAdd.beacons = []
 }
+
+		// file inputs for add dialog (gallery and camera)
+		const fileInputAddGallery = ref<HTMLInputElement | null>(null)
+		const fileInputAddCamera = ref<HTMLInputElement | null>(null)
+		let currentAddObjectUrl: string | null = null
+		const onAddFileSelected = (e: Event) => {
+			const input = e.target as HTMLInputElement
+			if (!input.files || input.files.length === 0) return
+			const file = input.files[0]
+			if (currentAddObjectUrl) URL.revokeObjectURL(currentAddObjectUrl)
+			currentAddObjectUrl = URL.createObjectURL(file)
+			tempAdd.image = currentAddObjectUrl
+		}
+		const triggerAddGallery = () => fileInputAddGallery.value?.click()
+		const triggerAddCamera = () => fileInputAddCamera.value?.click()
 
 	// beacon helpers for edit dialog
 	const editBeaconInput = ref('')
@@ -692,27 +714,72 @@ const handleConfirmDelete = () => {
 			</Dialog>
 
 		<!-- Add Dialog -->
-		<Dialog v-model:open="addDialogOpen">
-			<DialogContent>
-				<DialogHeader>
-					<DialogTitle>Agregar Ganado</DialogTitle>
-					<DialogDescription>Registra un nuevo animal</DialogDescription>
-				</DialogHeader>
+			<Dialog v-model:open="addDialogOpen">
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Registrar Nuevo Ganado</DialogTitle>
+						<DialogDescription>Completa la información del animal para agregarlo al sistema de monitoreo.</DialogDescription>
+					</DialogHeader>
 
 					<div class="py-4 space-y-3">
+						<!-- Nombre / Tag -->
 						<div>
 							<label class="block text-sm font-medium">Nombre / Tag <span class="text-destructive">*</span></label>
-							<Input v-model="tempAdd.tag" placeholder="Nombre / Apodo" />
+							<Input v-model="tempAdd.tag" placeholder="Ej: El Pinto, La Manchada..." />
 							<div v-if="addErrors.tag" class="text-destructive text-sm mt-1">{{ addErrors.tag }}</div>
 						</div>
+
+						<!-- ID (auto) -->
 						<div>
-							<label class="block text-sm font-medium">Imagen del Animal</label>
-							<Input v-model="tempAdd.image" placeholder="URL de imagen (opcional)" />
+							<label class="block text-sm font-medium mt-1">ID del Animal</label>
+							<input class="w-full rounded-md border p-2 bg-muted text-sm" placeholder="Dejar vacío para generar automáticamente" disabled />
+							<div class="text-xs text-muted-foreground mt-1">Si no se especifica, se generará un ID automáticamente</div>
+						</div>
+
+						<!-- Zona inicial (select) -->
+						<div>
+							<label class="block text-sm font-medium mt-3">Zona Inicial <span class="text-destructive">*</span></label>
+							<Select v-model="tempAdd.zone">
+								<SelectTrigger class="w-full">
+									<SelectValue placeholder="Selecciona una zona" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="">Selecciona una zona</SelectItem>
+									<template v-for="z in zones" :key="z">
+										<SelectItem :value="z">{{ z }}</SelectItem>
+									</template>
+								</SelectContent>
+							</Select>
+							<div v-if="addErrors.zone" class="text-destructive text-sm mt-1">{{ addErrors.zone }}</div>
+						</div>
+
+						<!-- Imagen: gallery / camera boxes -->
+						<div>
+							<label class="block text-sm font-medium mt-3">Imagen del Animal</label>
+							<div class="mt-2 grid grid-cols-2 gap-3">
+								<!-- gallery -->
+								<div @click.prevent="triggerAddGallery" class="flex flex-col items-center justify-center border-dashed border-2 border-gray-200 rounded-lg p-6 cursor-pointer hover:bg-gray-50">
+									<div class="text-sm font-medium">Subir desde galería</div>
+									<div class="text-xs text-muted-foreground mt-2">Selecciona una imagen desde tu dispositivo</div>
+								</div>
+								<!-- camera -->
+								<div @click.prevent="triggerAddCamera" class="flex flex-col items-center justify-center border-dashed border-2 border-gray-200 rounded-lg p-6 cursor-pointer hover:bg-gray-50">
+									<div class="text-sm font-medium">Tomar foto</div>
+									<div class="text-xs text-muted-foreground mt-2">Abrir la cámara (si el dispositivo lo permite)</div>
+								</div>
+							</div>
+							<div class="text-xs text-muted-foreground mt-2">Opcional: Si no se proporciona, se usará una imagen por defecto</div>
+							<!-- hidden file inputs -->
+							<input ref="fileInputAddGallery" type="file" accept="image/*" class="hidden" @change="onAddFileSelected" />
+							<input ref="fileInputAddCamera" type="file" accept="image/*" capture="environment" class="hidden" @change="onAddFileSelected" />
+							<div v-if="tempAdd.image" class="mt-3">
+								<img :src="tempAdd.image" alt="preview" class="w-full h-40 object-cover rounded-lg" />
+							</div>
 							<div v-if="addErrors.image" class="text-destructive text-sm mt-1">{{ addErrors.image }}</div>
 						</div>
-						<Input v-model="tempAdd.zone" placeholder="Zona (opcional)" />
-						<!-- beacons area for add -->
-						<label class="block text-sm font-medium mt-2">Beacons</label>
+
+						<!-- beacons and notes -->
+						<label class="block text-sm font-medium mt-3">Beacons</label>
 						<div class="flex gap-2 mt-2">
 							<input v-model="addBeaconInput" placeholder="Agregar beacon (ID)" class="flex-1 rounded-md border p-2" />
 							<button @click.prevent="addBeaconToTemp" class="px-3 py-2 bg-primary text-white rounded-md">Agregar</button>
@@ -723,16 +790,17 @@ const handleConfirmDelete = () => {
 								<button @click.prevent="removeBeaconFromTemp(idx)" class="ml-1 text-sm text-destructive">✕</button>
 							</span>
 						</div>
+
 						<label class="block text-sm font-medium mt-3">Notas Adicionales</label>
 						<textarea v-model="tempAdd.notes" placeholder="Información adicional sobre el animal..." class="w-full rounded-md border p-3 h-24"></textarea>
 					</div>
 
-				<DialogFooter>
-					<Button variant="outline" @click="addDialogOpen = false">Cancelar</Button>
-					<Button :disabled="!canAdd" @click="handleConfirmAdd" class="bg-emerald-600 text-white hover:bg-emerald-700">Agregar</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
+					<DialogFooter>
+						<Button variant="outline" @click="addDialogOpen = false">Cancelar</Button>
+						<Button :disabled="!canAdd" @click="handleConfirmAdd" class="bg-emerald-600 text-white hover:bg-emerald-700">Registrar Ganado</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 
 		<!-- Edit Dialog -->
 		<Dialog v-model:open="editDialogOpen">
