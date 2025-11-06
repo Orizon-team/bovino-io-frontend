@@ -1,25 +1,102 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
-import { Beef } from 'lucide-vue-next'
+import { Beef, Eye, EyeOff } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card'
+import { register } from '@/services/Register'
 
 const router = useRouter()
 
-const formData = ref({
-  name: '',
-  email: '',
-  password: '',
-  confirmPassword: '',
-  acceptTerms: false
+const name = ref('')
+const email = ref('')
+const password = ref('')
+const confirmPassword = ref('')
+
+const touched = ref({
+  name: false,
+  email: false,
+  password: false, 
+  confirmPassword: false
 })
 
-const handleSubmit = (e: Event) => {
+const loading = ref(false)
+const serverError = ref<string | null>(null)
+const hasError = ref(false)
+const hasSuccess = ref(false)
+
+const showPassword = ref(false)
+const showConfirmPassword = ref(false)
+
+function togglePassword() {
+  showPassword.value = !showPassword.value
+}
+
+function toggleConfirmPassword() {
+  showConfirmPassword.value = !showConfirmPassword.value
+}
+
+const isNameValid = computed(() => {
+  return name.value.trim().length >= 3
+})
+
+const isEmailValid = computed(() => {
+  const value = email.value.trim()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+})
+
+const isPasswordValid = computed(() => {
+  return password.value.length >= 8
+})
+
+const isConfirmPasswordValid = computed(() => {
+  return confirmPassword.value === password.value && confirmPassword.value.length >= 8
+})
+
+const isFormValid = computed(() => {
+  return isNameValid.value && isEmailValid.value && isPasswordValid.value && isConfirmPasswordValid.value
+})
+
+const handleSubmit = async (e: Event) => {
   e.preventDefault()
-  router.push('/login')
+  
+  touched.value.name = true
+  touched.value.email = true
+  touched.value.password = true
+  touched.value.confirmPassword = true
+
+  if (!isFormValid.value) {
+    return
+  }
+
+  serverError.value = null
+  hasError.value = false
+  hasSuccess.value = false
+  loading.value = true
+
+  try {
+    const user = await register({
+      nombre: name.value,
+      correo_electronico: email.value,
+      contrasena: password.value,
+    })
+    
+    console.log('Usuario registrado:', user)
+    
+    hasSuccess.value = true
+    
+    setTimeout(() => {
+      router.push('/login')
+    }, 1500)
+  } catch (err) {
+    console.error('Error al registrar:', err)
+    serverError.value = err instanceof Error ? err.message : 'Error al crear la cuenta. Intenta nuevamente.'
+    hasError.value = true
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -54,7 +131,7 @@ const handleSubmit = (e: Event) => {
         </CardHeader>
 
         <CardContent>
-          <form @submit="handleSubmit" class="space-y-4">
+          <form @submit.prevent="handleSubmit" class="space-y-4">
             <div class="space-y-2">
               <Label for="name" class="text-foreground">
                 Nombre Completo
@@ -63,9 +140,15 @@ const handleSubmit = (e: Event) => {
                 id="name"
                 type="text"
                 placeholder="Juan Pérez"
-                v-model="formData.name"
+                v-model="name"
+                @blur="touched.name = true"
+                :disabled="loading || hasSuccess"
+                class="bg-background"
                 required
               />
+              <p v-if="touched.name && !isNameValid" class="text-destructive text-sm mt-1">
+                El nombre debe tener al menos 3 caracteres.
+              </p>
             </div>
 
             <div class="space-y-2">
@@ -76,39 +159,89 @@ const handleSubmit = (e: Event) => {
                 id="email"
                 type="email"
                 placeholder="tu@email.com"
-                v-model="formData.email"
+                v-model="email"
+                @blur="touched.email = true"
+                :disabled="loading || hasSuccess"
+                class="bg-background"
                 required
               />
+              <p v-if="touched.email && !isEmailValid" class="text-destructive text-sm mt-1">
+                Por favor, introduce un correo válido.
+              </p>
             </div>
 
             <div class="space-y-2">
               <Label for="password" class="text-foreground">
                 Contraseña
               </Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                v-model="formData.password"
-                required
-              />
+              <div class="relative">
+                <Input
+                  id="password"
+                  :type="showPassword ? 'text' : 'password'"
+                  placeholder="••••••••"
+                  v-model="password"
+                  @blur="touched.password = true"
+                  :disabled="loading || hasSuccess"
+                  class="bg-background pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  @click="togglePassword"
+                  :aria-pressed="showPassword"
+                  class="absolute inset-y-0 right-2 flex items-center px-2 text-muted-foreground"
+                >
+                  <Eye v-if="!showPassword" class="h-5 w-5 transform transition-transform duration-200" />
+                  <EyeOff v-else class="h-5 w-5 transform transition-transform duration-200" />
+                </button>
+              </div>
+              <p v-if="touched.password && !isPasswordValid" class="text-destructive text-sm mt-1">
+                La contraseña debe tener al menos 8 caracteres.
+              </p>
             </div>
 
             <div class="space-y-2">
               <Label for="confirmPassword" class="text-foreground">
                 Confirmar Contraseña
               </Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="••••••••"
-                v-model="formData.confirmPassword"
-                required
-              />
+              <div class="relative">
+                <Input
+                  id="confirmPassword"
+                  :type="showConfirmPassword ? 'text' : 'password'"
+                  placeholder="••••••••"
+                  v-model="confirmPassword"
+                  @blur="touched.confirmPassword = true"
+                  :disabled="loading || hasSuccess"
+                  class="bg-background pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  @click="toggleConfirmPassword"
+                  :aria-pressed="showConfirmPassword"
+                  class="absolute inset-y-0 right-2 flex items-center px-2 text-muted-foreground"
+                >
+                  <Eye v-if="!showConfirmPassword" class="h-5 w-5 transform transition-transform duration-200" />
+                  <EyeOff v-else class="h-5 w-5 transform transition-transform duration-200" />
+                </button>
+              </div>
+              <p v-if="touched.confirmPassword && !isConfirmPasswordValid" class="text-destructive text-sm mt-1">
+                Las contraseñas no coinciden.
+              </p>
             </div>
 
-            <Button type="submit" class="w-full" size="lg">
-              Crear Cuenta
+            <Button 
+              :disabled="loading || hasSuccess || !isFormValid" 
+              :variant="hasSuccess ? 'default' : hasError ? 'destructive' : loading ? 'outline' : 'default'"
+              :class="hasSuccess ? 'bg-green-600 hover:bg-green-700' : ''"
+              class="w-full" 
+              type="submit" 
+              size="lg"
+            >
+              <span v-if="hasSuccess">¡Cuenta Creada!</span>
+              <span v-else-if="loading">Creando cuenta...</span>
+              <span v-else-if="hasError">Reintentar</span>
+              <span v-else>Crear Cuenta</span>
             </Button>
           </form>
         </CardContent>
@@ -118,7 +251,7 @@ const handleSubmit = (e: Event) => {
             <div class="absolute inset-0 flex items-center">
               <span class="w-full border-t border-border"></span>
             </div>
-            <div class="relative  flex justify-center text-xs uppercase">
+            <div class="relative flex justify-center text-xs uppercase">
               <span class="bg-card px-2 text-muted-foreground">O</span>
             </div>
           </div>
