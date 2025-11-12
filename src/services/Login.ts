@@ -1,9 +1,9 @@
 const API_URL = 'https://bovino-io-backend.onrender.com/graphql'
 
 export type User = {
-  id_usuario: string
-  nombre: string
-  correo_electronico: string
+  id_user: string
+  name: string
+  email: string
 }
 
 export type LoginResponse = {
@@ -13,19 +13,19 @@ export type LoginResponse = {
   errors?: Array<{ message: string }>
 }
 
-export async function login(correo_electronico: string, contrasena: string): Promise<User> {
+export async function login(email: string, password: string): Promise<User> {
   const query = `
     mutation Login($input: LoginUserInput!) {
       login(input: $input) {
-        id_usuario
-        nombre
-        correo_electronico
+        id_user
+        name
+        email
       }
     }
   `
 
   const variables = {
-    input: { correo_electronico, contrasena }
+    input: { email, password }
   }
 
   const response = await fetch(API_URL, {

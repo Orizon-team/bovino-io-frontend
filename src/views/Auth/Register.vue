@@ -78,9 +78,9 @@ const handleSubmit = async (e: Event) => {
 
   try {
     const user = await register({
-      nombre: name.value,
-      correo_electronico: email.value,
-      contrasena: password.value,
+      name: name.value,
+      email: email.value,
+      password: password.value,
     })
     
     console.log('Usuario registrado:', user)

@@ -1,9 +1,9 @@
 const API_URL = 'https://bovino-io-backend.onrender.com/graphql'
 
 export type RegisterUser = {
-  id_usuario: string
-  nombre: string
-  correo_electronico: string
+  id_user: string
+  name: string
+  email: string
 }
 
 export type RegisterResponse = {
@@ -14,18 +14,18 @@ export type RegisterResponse = {
 }
 
 export type RegisterInput = {
-  nombre: string
-  correo_electronico: string
-  contrasena: string
+  name: string
+  email: string
+  password: string
 }
 
 export async function register(input: RegisterInput): Promise<RegisterUser> {
   const query = `
     mutation CreateUser($input: CreateUserInput!) {
       createUser(input: $input) {
-        id_usuario
-        nombre
-        correo_electronico
+        id_user
+        name
+        email
       }
     }
   `
