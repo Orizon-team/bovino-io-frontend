@@ -4,7 +4,7 @@ import { computed } from 'vue';
 const cardProps = defineProps<{ class?: string }>();
 
 const cardClass = computed(() => 
-  `bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm ${cardProps.class ?? ''}`
+  `bg-card text-card-foreground flex flex-col gap-4 rounded-lg border py-4 shadow ${cardProps.class ?? ''}`
 );
 </script>
 

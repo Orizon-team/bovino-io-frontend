@@ -393,6 +393,7 @@ const handleConfirmAdd = () => {
 			const input = e.target as HTMLInputElement
 			if (!input.files || input.files.length === 0) return
 			const file = input.files[0]
+			if (!file) return
 			if (currentAddObjectUrl) URL.revokeObjectURL(currentAddObjectUrl)
 			currentAddObjectUrl = URL.createObjectURL(file)
 			tempAdd.image = currentAddObjectUrl
@@ -445,7 +446,7 @@ const handleConfirmDelete = () => {
 				<h1 class="text-3xl font-bold text-foreground">Mi Ganadería</h1>
 				<p class="text-muted-foreground mt-1">Gestiona y monitorea todos tus animales ({{ cattleList.length }} registrados)</p>
 			</div>
-			<Button @click="addDialogOpen = true" size="lg" class="gap-2 bg-emerald-600 text-white hover:bg-emerald-700" >
+			<Button @click="addDialogOpen = true" size="lg" class="gap-2 bg-primary text-primary-foreground hover:bg-primary/90" >
 				<Plus class="h-5 w-5" />
 				Agregar Ganado
 			</Button>
@@ -519,7 +520,7 @@ const handleConfirmDelete = () => {
 								<h3 class="font-semibold text-lg text-foreground truncate">{{ cattle.tag }}</h3>
 								<div class="flex items-center gap-2 text-sm text-muted-foreground mt-2">
 									<template v-if="cattle.zone">
-										<Badge class="bg-primary/10 text-primary px-2 py-1">{{ cattle.zone }}</Badge>
+										<Badge class="bg-emerald-100 text-emerald-700 px-2 py-1">{{ cattle.zone }}</Badge>
 										<span class="ml-2">Última vez: {{ cattle.lastSeen }}</span>
 									</template>
 									<template v-else>
@@ -529,7 +530,7 @@ const handleConfirmDelete = () => {
 							</div>
 
 							<div class="flex flex-col items-end gap-2">
-								<Badge v-if="cattle.zone" class="bg-primary/10 text-primary">En línea</Badge>
+								<Badge v-if="cattle.zone" class="bg-emerald-100 text-emerald-700">En línea</Badge>
 								<Badge v-else variant="destructive">Desconocido</Badge>
 								<div class="flex gap-1 mt-2">
 									<Button variant="ghost" size="icon" @click.stop.prevent="handleEditCattle(cattle)">
@@ -593,7 +594,7 @@ const handleConfirmDelete = () => {
 
 		<!-- Modals -->
 				<Dialog v-model:open="detailModalOpen">
-					<DialogContent :showCloseButton="false" class="max-w-4xl p-6 rounded-lg bg-white shadow-lg">
+					<DialogContent :showCloseButton="false" class="w-full md:max-w-xl p-6 rounded-lg bg-white shadow-lg max-h-[80vh] overflow-y-auto">
 					<div class="relative">
 
 						<!-- Header row: image left + title/info right -->
@@ -615,8 +616,8 @@ const handleConfirmDelete = () => {
 										<div class="flex items-center gap-2">
 											<span class="text-sm text-muted-foreground">Ubicación Actual:</span>
 											<div class="flex items-center gap-2">
-												  <MapPin class="h-4 w-4 text-primary" />
-												  <Badge class="bg-primary/10 text-primary px-2 py-1">{{ selectedCattle?.zone || 'Sin ubicación' }}</Badge>
+													<MapPin class="h-4 w-4 text-primary" />
+													<Badge class="bg-emerald-100 text-emerald-700 px-2 py-1">{{ selectedCattle?.zone || 'Sin ubicación' }}</Badge>
 											</div>
 										</div>
 
@@ -707,7 +708,7 @@ const handleConfirmDelete = () => {
 						<!-- Footer buttons aligned right -->
 						<div class="mt-6 flex justify-end gap-3">
 							<Button variant="ghost" @click="detailModalOpen = false">Cerrar</Button>
-							<Button variant="secondary" class="bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-2 rounded-md" v-if="selectedCattle" @click="() => { if (selectedCattle) { handleEditCattle(selectedCattle); detailModalOpen = false } }">Editar</Button>
+											<Button variant="secondary" class="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md" v-if="selectedCattle" @click="() => { if (selectedCattle) { handleEditCattle(selectedCattle); detailModalOpen = false } }">Editar</Button>
 						</div>
 					</div>
 				</DialogContent>
@@ -797,14 +798,14 @@ const handleConfirmDelete = () => {
 
 					<DialogFooter>
 						<Button variant="outline" @click="addDialogOpen = false">Cancelar</Button>
-						<Button :disabled="!canAdd" @click="handleConfirmAdd" class="bg-emerald-600 text-white hover:bg-emerald-700">Registrar Ganado</Button>
+						<Button :disabled="!canAdd" @click="handleConfirmAdd" class="bg-primary text-primary-foreground hover:bg-primary/90">Registrar Ganado</Button>
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
 
 		<!-- Edit Dialog -->
 		<Dialog v-model:open="editDialogOpen">
-			<DialogContent>
+			<DialogContent class="w-full md:max-w-xl p-6 rounded-lg bg-white shadow-lg max-h-[80vh] overflow-y-auto">
 				<DialogHeader>
 					<DialogTitle>Editar Ganado</DialogTitle>
 					<DialogDescription>Modifica la información del animal</DialogDescription>
@@ -854,7 +855,7 @@ const handleConfirmDelete = () => {
 
 							<DialogFooter>
 								<Button variant="outline" @click="editDialogOpen = false">Cancelar</Button>
-								<Button :disabled="!canSaveEdit" v-if="editTemp.id !== 0" @click="saveEditFromTemp" class="bg-emerald-600 text-white hover:bg-emerald-700">Guardar</Button>
+								<Button :disabled="!canSaveEdit" v-if="editTemp.id !== 0" @click="saveEditFromTemp" class="bg-primary text-primary-foreground hover:bg-primary/90">Guardar</Button>
 							</DialogFooter>
 			</DialogContent>
 		</Dialog>
