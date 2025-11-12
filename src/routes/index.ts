@@ -45,6 +45,16 @@ const routes: RouteRecordRaw[] = [
         name: 'Cattle',
         component: () => import('../views/Dashboard/Mi_ganado.vue')
       },
+      {
+        path: 'alerts',
+        name: 'Alerts',
+        component: () => import('../views/Dashboard/Alerts.vue')
+      },
+      {
+        path: 'settings',
+        name: 'Settings',
+        component: () => import('../views/Dashboard/Settings.vue')
+      },
     ]
   }
 ]
