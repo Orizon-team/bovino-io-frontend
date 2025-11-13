@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import Button from '@/components/ui/button/Button.vue'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -11,9 +12,16 @@ import {
   DropdownMenuSeparator
 } from '@/components/ui/dropdown'
 import { Beef, LayoutDashboard, MapPin, Bell, Settings, User, LogOut } from 'lucide-vue-next'
+import { useUser } from '@/composables/useUser'
 
 const route = useRoute()
 const router = useRouter()
+
+const { userName, userEmail, userInitials, loadUser, clearUser } = useUser()
+
+onMounted(() => {
+  loadUser()
+})
 
 const navItems = [
   {
@@ -53,6 +61,7 @@ const getButtonClass = (href: string) => {
 
 const handleLogout = () => {
   localStorage.clear()
+  clearUser()
   router.push('/')
 }
 
@@ -120,12 +129,12 @@ const handleSettings = () => {
           >
             <Avatar class="h-9 w-9">
               <AvatarFallback class="bg-primary text-primary-foreground">
-                JP
+                {{ userInitials }}
               </AvatarFallback>
             </Avatar>
             <div class="flex flex-col items-start text-left">
-              <span class="text-sm font-semibold text-foreground">Juan Pérez</span>
-              <span class="text-xs text-muted-foreground">juan@bovino.io</span>
+              <span class="text-sm font-semibold text-foreground">{{ userName }}</span>
+              <span class="text-xs text-muted-foreground">{{ userEmail }}</span>
             </div>
           </Button>
         </DropdownMenuTrigger>
