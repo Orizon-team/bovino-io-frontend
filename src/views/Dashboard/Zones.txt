@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { cn } from '@/lib/utils'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import {
   AlertDialog,
-  AlertDialogAction,
+  AlertDialogAction, 
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -26,6 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   MapPin,
   Radio,
@@ -39,7 +40,6 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-vue-next'
-import { getZonesByUser, createZone, updateZone, deleteZone, type Zone as APIZone } from '@/services/Zones'
 
 type Beacon = {
   id: string
@@ -53,10 +53,97 @@ type Beacon = {
 type Zone = {
   id: string
   name: string
+  type: 'pasture' | 'stable' | 'feeding' | 'water'
   beacons: Beacon[]
 }
 
-const zones = ref<Zone[]>([])
+const mockZones: Zone[] = [
+  {
+    id: '1',
+    name: 'Pastizal Norte',
+    type: 'pasture',
+    beacons: [
+      {
+        id: 'b1',
+        deviceId: 'BLE-23323',
+        name: 'Sondeador Norte 1',
+        status: 'active',
+        battery: 87,
+        lastSeen: 'Hace 1 min',
+      },
+      {
+        id: 'b2',
+        deviceId: 'BLE-23329',
+        name: 'Sondeador Norte 2',
+        status: 'active',
+        battery: 92,
+        lastSeen: 'Hace 2 min',
+      },
+    ],
+  },
+  {
+    id: '2',
+    name: 'Establo A',
+    type: 'stable',
+    beacons: [
+      {
+        id: 'b3',
+        deviceId: 'BLE-23324',
+        name: 'Sondeador Establo',
+        status: 'active',
+        battery: 95,
+        lastSeen: 'Hace 30 seg',
+      },
+    ],
+  },
+  {
+    id: '3',
+    name: 'Área de Alimentación',
+    type: 'feeding',
+    beacons: [
+      {
+        id: 'b4',
+        deviceId: 'BLE-23325',
+        name: 'Sondeador Comedor 1',
+        status: 'warning',
+        battery: 45,
+        lastSeen: 'Hace 5 min',
+      },
+      {
+        id: 'b5',
+        deviceId: 'BLE-23330',
+        name: 'Sondeador Comedor 2',
+        status: 'inactive',
+        battery: 12,
+        lastSeen: 'Hace 1 hora',
+      },
+    ],
+  },
+  {
+    id: '4',
+    name: 'Pastizal Sur',
+    type: 'pasture',
+    beacons: [
+      {
+        id: 'b6',
+        deviceId: 'BLE-23326',
+        name: 'Sondeador Sur',
+        status: 'active',
+        battery: 91,
+        lastSeen: 'Hace 2 min',
+      },
+    ],
+  },
+]
+
+const zoneTypeConfig = {
+  pasture: { color: 'text-primary', bgColor: 'bg-primary/10', label: 'Pastizal' },
+  stable: { color: 'text-primary', bgColor: 'bg-primary/10', label: 'Establo' },
+  feeding: { color: 'text-primary', bgColor: 'bg-primary/10', label: 'Alimentación' },
+  water: { color: 'text-primary', bgColor: 'bg-primary/10', label: 'Agua' },
+}
+
+const zones = ref<Zone[]>(mockZones)
 const expandedZones = ref<Set<string>>(new Set())
 const addZoneDialogOpen = ref(false)
 const addBeaconDialogOpen = ref(false)
@@ -67,69 +154,14 @@ const deleteBeaconDialogOpen = ref(false)
 const selectedZone = ref<Zone | null>(null)
 const selectedBeacon = ref<{ zoneId: string; beacon: Beacon } | null>(null)
 
-const loading = ref(false)
-const error = ref<string | null>(null)
-
-const addZoneLoading = ref(false)
-const addZoneError = ref<string | null>(null)
-const addZoneTouched = ref(false)
-
-const editZoneLoading = ref(false)
-const editZoneError = ref<string | null>(null)
-const editZoneTouched = ref(false)
-
-const deleteZoneLoading = ref(false)
-const deleteZoneError = ref<string | null>(null)
-
-const zoneFormData = ref<{ name: string }>({ name: '' })
+const zoneFormData = ref<{ name: string; type: Zone['type'] }>({ name: '', type: 'pasture' })
 const beaconFormData = ref<{ deviceId: string; name: string; zoneId: string }>({ deviceId: '', name:'', zoneId: '' })
-
-const isZoneNameValid = computed(() => {
-  return zoneFormData.value.name.trim().length >= 3
-})
 
 const totalZones = computed(() => zones.value.length)
 const totalBeacons = computed(() => zones.value.reduce((acc, z) => acc + z.beacons.length, 0))
 const activeBeacons = computed(() => zones.value.reduce((acc, z) => acc + z.beacons.filter((b) => b.status === 'active').length, 0))
 const warningBeacons = computed(() => zones.value.reduce((acc, z) => acc + z.beacons.filter((b) => b.status === 'warning').length, 0))
 const inactiveBeacons = computed(() => zones.value.reduce((acc, z) => acc + z.beacons.filter((b) => b.status === 'inactive').length, 0))
-
-const loadZones = async () => {
-  loading.value = true
-  error.value = null
-
-  try {
-    const userString = localStorage.getItem('user')
-    if (!userString) {
-      throw new Error('No se encontró información del usuario')
-    }
-
-    const user = JSON.parse(userString)
-    const userId = user.id_user
-
-    if (!userId) {
-      throw new Error('ID de usuario no válido')
-    }
-
-    const apiZones = await getZonesByUser(userId)
-
-    // ✅ EDITADO: Sin propiedad 'type'
-    zones.value = apiZones.map((zone) => ({
-      id: String(zone.id),
-      name: zone.name,
-      beacons: [],
-    }))
-  } catch (err) {
-    console.error('Error al cargar zonas:', err)
-    error.value = err instanceof Error ? err.message : 'Error al cargar las zonas'
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(() => {
-  loadZones()
-})
 
 const toggleZone = (zoneId: string) => {
   const newSet = new Set(expandedZones.value)
@@ -138,49 +170,16 @@ const toggleZone = (zoneId: string) => {
   expandedZones.value = newSet
 }
 
-const handleAddZone = async () => {
-  addZoneTouched.value = true
-
-  if (!isZoneNameValid.value) {
-    return
+const handleAddZone = () => {
+  const newZone: Zone = {
+    id: String(zones.value.length + 1),
+    name: zoneFormData.value.name,
+    type: zoneFormData.value.type,
+    beacons: [],
   }
-
-  addZoneLoading.value = true
-  addZoneError.value = null
-
-  try {
-    const userString = localStorage.getItem('user')
-    if (!userString) {
-      throw new Error('No se encontró información del usuario')
-    }
-
-    const user = JSON.parse(userString)
-    const userId = user.id_user
-
-    if (!userId) {
-      throw new Error('ID de usuario no válido')
-    }
-
-    const newZone = await createZone({
-      name: zoneFormData.value.name,
-      id_user: userId,
-    })
-
-    zones.value = [...zones.value, {
-      id: String(newZone.id),
-      name: newZone.name,
-      beacons: [],
-    }]
-
-    addZoneDialogOpen.value = false
-    zoneFormData.value = { name: '' }
-    addZoneTouched.value = false
-  } catch (err) {
-    console.error('Error al crear zona:', err)
-    addZoneError.value = err instanceof Error ? err.message : 'Error al crear la zona'
-  } finally {
-    addZoneLoading.value = false
-  }
+  zones.value = [...zones.value, newZone]
+  addZoneDialogOpen.value = false
+  zoneFormData.value = { name: '', type: 'pasture' }
 }
 
 const handleAddBeacon = () => {
@@ -199,48 +198,14 @@ const handleAddBeacon = () => {
   beaconFormData.value = { deviceId: '', name: '', zoneId: '' }
 }
 
-const handleEditZone = async () => {
-  editZoneTouched.value = true
-
-  if (!selectedZone.value || !isZoneNameValid.value) {
-    return
-  }
-
-  editZoneLoading.value = true
-  editZoneError.value = null
-
-  try {
-    const userString = localStorage.getItem('user')
-    if (!userString) {
-      throw new Error('No se encontró información del usuario')
-    }
-
-    const user = JSON.parse(userString)
-    const userId = user.id_user
-
-    if (!userId) {
-      throw new Error('ID de usuario no válido')
-    }
-
-    const updatedZone = await updateZone(Number(selectedZone.value.id), {
-      name: zoneFormData.value.name,
-      id_user: userId,
-    })
-
-    zones.value = zones.value.map((z) =>
-      z.id === selectedZone.value?.id ? { ...z, name: updatedZone.name } : z
-    )
-
-    editZoneDialogOpen.value = false
-    selectedZone.value = null
-    zoneFormData.value = { name: '' }
-    editZoneTouched.value = false
-  } catch (err) {
-    console.error('Error al actualizar zona:', err)
-    editZoneError.value = err instanceof Error ? err.message : 'Error al actualizar la zona'
-  } finally {
-    editZoneLoading.value = false
-  }
+const handleEditZone = () => {
+  if (!selectedZone.value) return
+  zones.value = zones.value.map((z) =>
+    z.id === selectedZone.value?.id ? { ...z, name: zoneFormData.value.name, type: zoneFormData.value.type } : z,
+  )
+  editZoneDialogOpen.value = false
+  selectedZone.value = null
+  zoneFormData.value = { name: '', type: 'pasture' }
 }
 
 const handleEditBeacon = () => {
@@ -260,25 +225,11 @@ const handleEditBeacon = () => {
   beaconFormData.value = { deviceId: '', name: '', zoneId: '' }
 }
 
-const handleDeleteZone = async () => {
+const handleDeleteZone = () => {
   if (!selectedZone.value) return
-
-  deleteZoneLoading.value = true
-  deleteZoneError.value = null
-
-  try {
-    await deleteZone(Number(selectedZone.value.id))
-
-    zones.value = zones.value.filter((z) => z.id !== selectedZone.value!.id)
-
-    deleteZoneDialogOpen.value = false
-    selectedZone.value = null
-  } catch (err) {
-    console.error('Error al eliminar zona:', err)
-    deleteZoneError.value = err instanceof Error ? err.message : 'Error al eliminar la zona'
-  } finally {
-    deleteZoneLoading.value = false
-  }
+  zones.value = zones.value.filter((z) => z.id !== selectedZone.value!.id)
+  deleteZoneDialogOpen.value = false
+  selectedZone.value = null
 }
 
 const handleDeleteBeacon = () => {
@@ -294,7 +245,7 @@ const handleDeleteBeacon = () => {
 
 const openEditZoneDialog = (zone: Zone) => {
   selectedZone.value = zone
-  zoneFormData.value = { name: zone.name }
+  zoneFormData.value = { name: zone.name, type: zone.type }
   editZoneDialogOpen.value = true
 }
 
@@ -322,6 +273,7 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
 
 <template>
   <div class="p-6 space-y-6">
+    <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-3xl font-bold text-foreground">Zonas y Sondeadores</h1>
@@ -333,15 +285,8 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
       </Button>
     </div>
 
-    <div v-if="error" class="text-destructive text-sm p-3 rounded-md bg-destructive/10 border border-destructive/20">
-      {{ error }}
-    </div>
-
-    <div v-if="loading" class="text-center py-12">
-      <p class="text-muted-foreground">Cargando zonas...</p>
-    </div>
-
-    <div v-if="!loading" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
       <Card>
         <CardContent class="p-4">
           <div class="flex items-center justify-between">
@@ -413,17 +358,8 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
       </Card>
     </div>
 
-    <div v-if="!loading && zones.length === 0" class="text-center py-12">
-      <MapPin class="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-      <h3 class="text-lg font-semibold text-foreground mb-2">No tienes zonas creadas</h3>
-      <p class="text-muted-foreground mb-4">Comienza agregando tu primera zona para monitorear tu ganado</p>
-      <Button @click="addZoneDialogOpen = true" class="gap-2">
-        <Plus class="h-4 w-4" />
-        Agregar Primera Zona
-      </Button>
-    </div>
-
-    <div v-if="!loading && zones.length > 0" class="space-y-4">
+    <!-- Zones List -->
+    <div class="space-y-4">
       <template v-for="zone in zones" :key="zone.id">
         <Card class="overflow-hidden">
           <CardHeader class="pb-3">
@@ -434,8 +370,8 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
                   class="flex items-center gap-3 flex-1 text-left hover:opacity-80 transition-opacity"
                 >
                   <component :is="expandedZones.has(zone.id) ? ChevronDown : ChevronRight" class="h-5 w-5 text-muted-foreground shrink-0" />
-                  <div class="flex h-10 w-10 items-center justify-center rounded-lg shrink-0 bg-primary/10">
-                    <MapPin class="h-5 w-5 text-primary" />
+                  <div :class="cn('flex h-10 w-10 items-center justify-center rounded-lg shrink-0', zoneTypeConfig[zone.type].bgColor)">
+                    <MapPin :class="cn('h-5 w-5', zoneTypeConfig[zone.type].color)" />
                   </div>
                   <div class="flex-1 min-w-0">
                     <CardTitle class="text-lg font-semibold truncate">{{ zone.name }}</CardTitle>
@@ -530,6 +466,7 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
                       </div>
                     </div>
 
+                    <!-- Battery -->
                     <div class="space-y-1">
                       <div class="flex items-center justify-between text-xs">
                         <div class="flex items-center gap-1">
@@ -554,6 +491,7 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
       </template>
     </div>
 
+    <!-- Add Zone Dialog -->
     <Dialog v-model:open="addZoneDialogOpen">
       <DialogContent>
         <DialogHeader>
@@ -562,44 +500,71 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
         </DialogHeader>
 
         <div class="space-y-4 py-4">
-          <div v-if="addZoneError" class="text-destructive text-sm p-3 rounded-md bg-destructive/10 border border-destructive/20">
-            {{ addZoneError }}
+          <div class="space-y-2">
+            <Label for="zone-name">Nombre de la Zona</Label>
+            <Input 
+              id="zone-name" 
+              placeholder="Ej: Pastizal Norte" 
+              v-model="zoneFormData.name"
+            />
           </div>
 
           <div class="space-y-2">
-            <Label for="zone-name">Nombre de la Zona</Label>
-            <Input
-              id="zone-name"
-              v-model="zoneFormData.name"
-              placeholder="Ej: Pastizal Norte"
-              @blur="addZoneTouched = true"
-              :disabled="addZoneLoading"
-            />
-            <p v-if="addZoneTouched && !isZoneNameValid" class="text-destructive text-sm">
-              El nombre debe tener al menos 3 caracteres.
-            </p>
+            <Label for="zone-type">Tipo de Zona</Label>
+            <Select v-model="zoneFormData.type">
+              <SelectTrigger>
+                <SelectValue>{{ zoneTypeConfig[zoneFormData.type].label }}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pasture">Pastizal</SelectItem>
+                <SelectItem value="stable">Establo</SelectItem>
+                <SelectItem value="feeding">Alimentación</SelectItem>
+                <SelectItem value="water">Agua</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            @click="addZoneDialogOpen = false"
-            :disabled="addZoneLoading"
-          >
-            Cancelar
-          </Button>
-          <Button
+          <Button variant="outline" @click="addZoneDialogOpen = false">Cancelar</Button>
+          <Button 
+            :disabled="!zoneFormData.name"
             @click="handleAddZone"
-            :disabled="addZoneLoading || !zoneFormData.name"
           >
-            <span v-if="addZoneLoading">Agregando...</span>
-            <span v-else>Agregar Zona</span>
+            Agregar Zona
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
 
+    <!-- Add Beacon Dialog -->
+    <Dialog v-model:open="addBeaconDialogOpen">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Agregar Sondeador</DialogTitle>
+          <DialogDescription>Registra un nuevo sondeador BLE en esta zona</DialogDescription>
+        </DialogHeader>
+
+        <div class="space-y-4 py-4">
+          <div class="space-y-2">
+            <Label for="beacon-name">Nombre del Dispositivo</Label>
+            <Input id="beacon-name" placeholder="Ej: Sondeador Norte" v-model="beaconFormData.name" />
+          </div>
+          <div class="space-y-2">
+            <Label for="beacon-deviceId">ID del Dispositivo</Label>
+            <Input id="beacon-deviceId" placeholder="Ej: BLE-23323" v-model="beaconFormData.deviceId" />
+            <p class="text-xs text-muted-foreground">Identificador único del sondeador para vincular a tu cuenta</p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" @click="addBeaconDialogOpen = false">Cancelar</Button>
+          <Button :disabled="!beaconFormData.deviceId" @click="handleAddBeacon">Agregar Sondeador</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Edit Zone Dialog -->
     <Dialog v-model:open="editZoneDialogOpen">
       <DialogContent>
         <DialogHeader>
@@ -608,44 +573,57 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
         </DialogHeader>
 
         <div class="space-y-4 py-4">
-          <div v-if="editZoneError" class="text-destructive text-sm p-3 rounded-md bg-destructive/10 border border-destructive/20">
-            {{ editZoneError }}
+          <div class="space-y-2">
+            <Label for="edit-zone-name">Nombre de la Zona</Label>
+            <Input id="edit-zone-name" v-model="zoneFormData.name" />
           </div>
 
           <div class="space-y-2">
-            <Label for="edit-zone-name">Nombre de la Zona</Label>
-            <Input
-              id="edit-zone-name"
-              v-model="zoneFormData.name"
-              placeholder="Ej: Pastizal Sur"
-              @blur="editZoneTouched = true"
-              :disabled="editZoneLoading"
-            />
-            <p v-if="editZoneTouched && !isZoneNameValid" class="text-destructive text-sm">
-              El nombre debe tener al menos 3 caracteres.
-            </p>
+            <Label for="edit-zone-type">Tipo de Zona</Label>
+            <Select v-model="zoneFormData.type">
+              <SelectTrigger>
+                <SelectValue>{{ zoneTypeConfig[zoneFormData.type].label }}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pasture">Pastizal</SelectItem>
+                <SelectItem value="stable">Establo</SelectItem>
+                <SelectItem value="feeding">Alimentación</SelectItem>
+                <SelectItem value="water">Agua</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            @click="editZoneDialogOpen = false"
-            :disabled="editZoneLoading"
-          >
-            Cancelar
-          </Button>
-          <Button
-            @click="handleEditZone"
-            :disabled="editZoneLoading || !isZoneNameValid"
-          >
-            <span v-if="editZoneLoading">Guardando...</span>
-            <span v-else>Guardar Cambios</span>
-          </Button>
+          <Button variant="outline" @click="editZoneDialogOpen = false">Cancelar</Button>
+          <Button @click="handleEditZone">Guardar Cambios</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
 
+    <!-- Edit Beacon Dialog -->
+    <Dialog v-model:open="editBeaconDialogOpen">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Editar Sondeador</DialogTitle>
+          <DialogDescription>Modifica el Nombre del dispositivo</DialogDescription>
+        </DialogHeader>
+
+        <div class="space-y-4 py-4">
+          <div class="space-y-2">
+            <Label for="edit-beacon-name">Nombre del Dispositivo</Label>
+            <Input id="edit-beacon-name" v-model="beaconFormData.name" />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" @click="editBeaconDialogOpen = false">Cancelar</Button>
+          <Button @click="handleEditBeacon">Guardar Cambios</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Delete Zone Alert -->
     <AlertDialog v-model:open="deleteZoneDialogOpen">
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -655,23 +633,28 @@ const openDeleteBeaconDialog = (zoneId: string, beacon: Beacon) => {
           </AlertDialogDescription>
         </AlertDialogHeader>
 
-        <div v-if="deleteZoneError" class="text-destructive text-sm p-3 rounded-md bg-destructive/10 border border-destructive/20">
-          {{ deleteZoneError }}
-        </div>
-
         <AlertDialogFooter>
-          <AlertDialogCancel :disabled="deleteZoneLoading">Cancelar</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
-            @click="handleDeleteZone"
-            :disabled="deleteZoneLoading"
-          >
-            <span v-if="deleteZoneLoading">Eliminando...</span>
-            <span v-else>Eliminar</span>
-          </AlertDialogAction>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" @click="handleDeleteZone">Eliminar</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
 
+    <!-- Delete Beacon Alert -->
+    <AlertDialog v-model:open="deleteBeaconDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Esta acción eliminará permanentemente el sondeador "{{ selectedBeacon?.beacon.name }}". Los datos históricos se conservarán pero el dispositivo dejará de monitorear.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" @click="handleDeleteBeacon">Eliminar</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>
