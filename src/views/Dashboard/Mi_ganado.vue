@@ -452,29 +452,32 @@ const handleConfirmDelete = () => {
 			</Button>
 		</div>
 
-		<!-- Filters -->
-		<div class="flex flex-col gap-4 sm:flex-row sm:items-center">
-			<div class="relative flex-1 max-w-md">
-				<Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-				<Input placeholder="Buscar por nombre o ID..." v-model="searchQuery" class="pl-9" />
-			</div>
+	<!-- Filters -->
+	<div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+		<div class="relative flex-1 max-w-md">
+			<Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+			<Input placeholder="Buscar por nombre o ID..." v-model="searchQuery" class="pl-9 !bg-white" />
+		</div>
 
-			<Select v-model="zoneFilter">
-				<SelectTrigger class="w-[220px]">
-					<Filter class="h-4 w-4 mr-2" />
-					<SelectValue placeholder="Filtrar por zona" />
-				</SelectTrigger>
-				<SelectContent>
-					<SelectItem value="all">Todas las zonas</SelectItem>
-					<SelectItem value="online">En línea</SelectItem>
-					<SelectItem value="offline">Sin señal</SelectItem>
-					<template v-for="zone in zones" :key="zone">
-						<SelectItem :value="zone">{{ zone }}</SelectItem>
-					</template>
-				</SelectContent>
-			</Select>
-
-			<div class="flex gap-1 border rounded-lg p-1">
+	<Select v-model="zoneFilter">
+			<SelectTrigger class="w-[220px] !bg-white">
+				<Filter class="h-4 w-4 mr-2" />
+				<SelectValue placeholder="Filtrar por zona">
+					<span v-if="zoneFilter === 'all'">Todas las zonas</span>
+					<span v-else-if="zoneFilter === 'online'">En línea</span>
+					<span v-else-if="zoneFilter === 'offline'">Sin señal</span>
+					<span v-else>{{ zoneFilter }}</span>
+				</SelectValue>
+			</SelectTrigger>
+			<SelectContent>
+				<SelectItem value="all">Todas las zonas</SelectItem>
+				<SelectItem value="online">En línea</SelectItem>
+				<SelectItem value="offline">Sin señal</SelectItem>
+				<template v-for="zone in zones" :key="zone">
+					<SelectItem :value="zone">{{ zone }}</SelectItem>
+				</template>
+			</SelectContent>
+		</Select>			<div class="flex gap-1 border rounded-lg p-1">
 				<Button :variant="viewMode === 'grid' ? 'secondary' : 'ghost'" size="sm" @click="viewMode = 'grid'" class="gap-2">
 					<LayoutGrid class="h-4 w-4" />
 					Cards
@@ -504,44 +507,45 @@ const handleConfirmDelete = () => {
 				<CardContent class="p-0 overflow-hidden">
 					<div class="flex flex-col items-start gap-0">
 						<!-- image area with optional overlay when offline -->
-						<div class="relative w-full">
-							<img :src="cattle.image || '/images/Vaca.jpeg'" :alt="cattle.tag" class="h-44 w-full object-cover" />
-							<!-- overlay for no-signal -->
-							<div v-if="!cattle.zone" class="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center">
-								<Badge variant="destructive" class="px-3 py-2 text-sm">Sin Señal</Badge>
-							</div>
+					<div class="relative w-full">
+						<img :src="cattle.image || '/images/Vaca.jpeg'" :alt="cattle.tag" class="h-44 w-full object-cover" />
+						
+						<!-- Botones de editar y eliminar sobre la imagen -->
+						<div class="absolute top-2 right-2 flex gap-2">
+							<Button variant="ghost" size="icon" class="h-9 w-9 bg-white hover:bg-white/90 rounded-full shadow-md" @click.stop.prevent="handleEditCattle(cattle)">
+								<Pencil class="h-4 w-4 text-foreground" />
+							</Button>
+							<Button variant="ghost" size="icon" class="h-9 w-9 bg-red-500 hover:bg-red-600 rounded-full shadow-md" @click.stop.prevent="handleDeleteCattle(cattle)">
+								<Trash2 class="h-4 w-4 text-white" />
+							</Button>
 						</div>
-
-						<div class="w-full p-4 flex items-start justify-between">
-							<div class="min-w-0">
-								<div class="flex items-center gap-2 mb-1">
-									<span class="text-sm font-bold text-foreground">ID: {{ cattle.id }}</span>
-								</div>
-								<h3 class="font-semibold text-lg text-foreground truncate">{{ cattle.tag }}</h3>
-								<div class="flex items-center gap-2 text-sm text-muted-foreground mt-2">
-									<template v-if="cattle.zone">
-										<Badge class="bg-emerald-100 text-emerald-700 px-2 py-1">{{ cattle.zone }}</Badge>
-										<span class="ml-2">Última vez: {{ cattle.lastSeen }}</span>
-									</template>
-									<template v-else>
-										<span class="text-destructive font-medium">Sin señal • {{ cattle.lastSeen }}</span>
-									</template>
-								</div>
-							</div>
-
-							<div class="flex flex-col items-end gap-2">
-								<Badge v-if="cattle.zone" class="bg-emerald-100 text-emerald-700">En línea</Badge>
-								<Badge v-else variant="destructive">Desconocido</Badge>
-								<div class="flex gap-1 mt-2">
-									<Button variant="ghost" size="icon" @click.stop.prevent="handleEditCattle(cattle)">
-										<Pencil class="h-4 w-4" />
-									</Button>
-									<Button variant="ghost" size="icon" @click.stop.prevent="handleDeleteCattle(cattle)">
-										<Trash2 class="h-4 w-4 text-destructive" />
-									</Button>
-								</div>
-							</div>
+						
+						<!-- overlay for no-signal -->
+						<div v-if="!cattle.zone" class="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center">
+							<Badge variant="destructive" class="px-3 py-2 text-sm">Sin Señal</Badge>
 						</div>
+					</div>
+
+					<div class="w-full p-4">
+						<div class="flex items-center justify-between mb-1">
+							<span class="text-sm font-bold text-foreground">ID: {{ cattle.id }}</span>
+							<Badge v-if="cattle.zone" class="bg-emerald-100 text-emerald-700">En línea</Badge>
+							<Badge v-else variant="destructive">Desconocido</Badge>
+						</div>
+						<h3 class="font-semibold text-lg text-foreground truncate">{{ cattle.tag }}</h3>
+						<div class="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+							<template v-if="cattle.zone">
+								<MapPin class="h-3 w-3 text-primary" />
+								<Badge class="bg-emerald-100 text-emerald-700 px-2 py-1">{{ cattle.zone }}</Badge>
+							</template>
+							<template v-else>
+								<span class="text-destructive font-medium">Sin señal</span>
+							</template>
+						</div>
+						<div class="text-xs text-muted-foreground mt-1">
+							Última vez: {{ cattle.lastSeen }}
+						</div>
+					</div>
 					</div>
 				</CardContent>
 			</Card>
@@ -688,15 +692,15 @@ const handleConfirmDelete = () => {
 								<CardContent class="p-6">
 									<div class="flex items-center justify-between">
 										<div>
-											<div class="text-sm text-muted-foreground">Beacons asignados</div>
-											<div class="mt-2 flex gap-2 flex-wrap">
-												<template v-for="b in selectedCattle?.beacons || []" :key="b">
-													<span class="inline-flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-md text-sm">{{ b }}</span>
-												</template>
-												<template v-if="!(selectedCattle?.beacons && selectedCattle.beacons.length)">
-												<span class="text-sm text-muted-foreground">No hay beacons asignados</span>
-												</template>
-											</div>
+									<div class="text-sm text-muted-foreground">Beacons asignados</div>
+									<div class="mt-2 flex gap-2 flex-wrap">
+										<template v-for="b in selectedCattle?.beacons || []" :key="b">
+											<span class="inline-flex items-center gap-2 bg-white border border-gray-200 px-3 py-1 rounded-md text-sm">{{ b }}</span>
+										</template>
+										<template v-if="!(selectedCattle?.beacons && selectedCattle.beacons.length)">
+										<span class="text-sm text-muted-foreground">No hay beacons asignados</span>
+										</template>
+									</div>
 										</div>
 									</div>
 									<div class="mt-3 text-sm text-muted-foreground">Notas</div>
@@ -726,7 +730,7 @@ const handleConfirmDelete = () => {
 						<!-- Nombre / Tag -->
 						<div>
 							<label class="block text-sm font-medium">Nombre / Tag <span class="text-destructive">*</span></label>
-							<Input v-model="tempAdd.tag" placeholder="Ej: El Pinto, La Manchada..." />
+							<Input class="!bg-white" v-model="tempAdd.tag" placeholder="Ej: El Pinto, La Manchada..." />
 							<div v-if="addErrors.tag" class="text-destructive text-sm mt-1">{{ addErrors.tag }}</div>
 						</div>
 
@@ -734,7 +738,7 @@ const handleConfirmDelete = () => {
 						<div>
 							<label class="block text-sm font-medium mt-1">ID del Animal</label>
 							<input class="w-full rounded-md border p-2 bg-muted text-sm" placeholder="Dejar vacío para generar automáticamente" disabled />
-							<div class="text-xs text-muted-foreground mt-1">Si no se especifica, se generará un ID automáticamente</div>
+							<div class="text-xs !bg-white">Si no se especifica, se generará un ID automáticamente</div>
 						</div>
 
 						<!-- Zona inicial (select) -->
@@ -757,18 +761,18 @@ const handleConfirmDelete = () => {
 						<!-- Imagen: gallery / camera boxes -->
 						<div>
 							<label class="block text-sm font-medium mt-3">Imagen del Animal</label>
-							<div class="mt-2 grid grid-cols-2 gap-3">
-								<!-- gallery -->
-								<div @click.prevent="triggerAddGallery" class="flex flex-col items-center justify-center border-dashed border-2 border-gray-200 rounded-lg p-6 cursor-pointer hover:bg-gray-50">
-									<div class="text-sm font-medium">Subir desde galería</div>
-									<div class="text-xs text-muted-foreground mt-2">Selecciona una imagen desde tu dispositivo</div>
-								</div>
-								<!-- camera -->
-								<div @click.prevent="triggerAddCamera" class="flex flex-col items-center justify-center border-dashed border-2 border-gray-200 rounded-lg p-6 cursor-pointer hover:bg-gray-50">
-									<div class="text-sm font-medium">Tomar foto</div>
-									<div class="text-xs text-muted-foreground mt-2">Abrir la cámara (si el dispositivo lo permite)</div>
-								</div>
+						<div class="mt-2 grid grid-cols-2 gap-3">
+							<!-- gallery -->
+							<div @click.prevent="triggerAddGallery" class="flex flex-col items-center justify-center border-dashed border-2 border-gray-200 rounded-lg p-6 cursor-pointer hover:bg-white">
+								<div class="text-sm font-medium">Subir desde galería</div>
+								<div class="text-xs text-muted-foreground mt-2">Selecciona una imagen desde tu dispositivo</div>
 							</div>
+							<!-- camera -->
+							<div @click.prevent="triggerAddCamera" class="flex flex-col items-center justify-center border-dashed border-2 border-gray-200 rounded-lg p-6 cursor-pointer hover:bg-white">
+								<div class="text-sm font-medium">Tomar foto</div>
+								<div class="text-xs text-muted-foreground mt-2">Abrir la cámara (si el dispositivo lo permite)</div>
+							</div>
+						</div>
 							<div class="text-xs text-muted-foreground mt-2">Opcional: Si no se proporciona, se usará una imagen por defecto</div>
 							<!-- hidden file inputs -->
 							<input ref="fileInputAddGallery" type="file" accept="image/*" class="hidden" @change="onAddFileSelected" />
@@ -782,17 +786,17 @@ const handleConfirmDelete = () => {
 						<!-- beacons and notes -->
 						<label class="block text-sm font-medium mt-3">Beacons</label>
 						<div class="flex gap-2 mt-2">
-							<input v-model="addBeaconInput" placeholder="Agregar beacon (ID)" class="flex-1 rounded-md border p-2" />
-							<button @click.prevent="addBeaconToTemp" class="px-3 py-2 bg-primary text-white rounded-md">Agregar</button>
-						</div>
-						<div class="flex gap-2 flex-wrap mt-2">
-							<span v-for="(b, idx) in tempAdd.beacons" :key="b" class="inline-flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-md text-sm">
-								{{ b }}
-								<button @click.prevent="removeBeaconFromTemp(idx)" class="ml-1 text-sm text-destructive">✕</button>
-							</span>
-						</div>
+						<input v-model="addBeaconInput" placeholder="Agregar beacon (ID)" class="flex-1 rounded-md border p-2" />
+						<button @click.prevent="addBeaconToTemp" class="px-3 py-2 bg-primary text-white rounded-md">Agregar</button>
+					</div>
+					<div class="flex gap-2 flex-wrap mt-2">
+						<span v-for="(b, idx) in tempAdd.beacons" :key="b" class="inline-flex items-center gap-2 bg-white border border-gray-200 px-3 py-1 rounded-md text-sm">
+							{{ b }}
+							<button @click.prevent="removeBeaconFromTemp(idx)" class="ml-1 text-sm text-destructive">✕</button>
+						</span>
+					</div>
 
-						<label class="block text-sm font-medium mt-3">Notas Adicionales</label>
+					<label class="block text-sm font-medium mt-3">Notas Adicionales</label>
 						<textarea v-model="tempAdd.notes" placeholder="Información adicional sobre el animal..." class="w-full rounded-md border p-3 h-24"></textarea>
 					</div>
 
@@ -815,17 +819,17 @@ const handleConfirmDelete = () => {
 								<template v-if="editTemp.id !== 0">
 									<!-- Nombre / Tag -->
 									<label class="block text-sm font-medium">Nombre / Tag <span class="text-destructive">*</span></label>
-									<Input v-model="editTemp.tag" placeholder="Nombre / Apodo" />
-									<div v-if="editErrors.tag" class="text-destructive text-sm mt-1">{{ editErrors.tag }}</div>
+									<Input class="!bg-white" v-model="editTemp.tag" placeholder="Nombre / Apodo" />
+									<div v-if="editErrors.tag" class="text-destructive text-sm mt-1 ">{{ editErrors.tag }}</div>
 
 									<!-- ID (no editable) -->
 									<label class="block text-sm font-medium mt-3">ID del Animal</label>
-									<input class="w-full rounded-md border p-2 bg-muted text-sm" :value="editTemp.id" disabled />
+									<input class="w-full rounded-md border p-2 !bg-white" :value="editTemp.id" disabled />
 									<div class="text-xs text-muted-foreground mt-1">El ID no se puede modificar</div>
 
 									<!-- Zona -->
 									<label class="block text-sm font-medium mt-3">Zona Actual <span class="text-destructive">*</span></label>
-									<Input v-model="editTemp.zone" placeholder="Zona (opcional)" />
+									<Input class="!bg-white" v-model="editTemp.zone" placeholder="Zona (opcional)" />
 
 									<!-- Imagen preview con boton eliminar -->
 									<label class="block text-sm font-medium mt-3">Imagen del Animal</label>
@@ -837,17 +841,17 @@ const handleConfirmDelete = () => {
 									<!-- Beacons: show existing and add new -->
 									<label class="block text-sm font-medium mt-3">Beacons</label>
 									<div class="flex items-center gap-2 mt-2">
-										<input v-model="editBeaconInput" placeholder="Agregar beacon (ID)" class="flex-1 rounded-md border p-2" />
-										<button @click.prevent="addBeaconToEdit" class="px-3 py-2 bg-primary text-white rounded-md">Agregar</button>
-									</div>
-									<div class="flex gap-2 flex-wrap mt-2">
-										<span v-for="(b, idx) in editTemp.beacons" :key="b" class="inline-flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-md text-sm">
-											{{ b }}
-											<button @click.prevent="removeBeaconFromEdit(idx)" class="ml-1 text-sm text-destructive">✕</button>
-										</span>
-									</div>
+									<input v-model="editBeaconInput" placeholder="Agregar beacon (ID)" class="flex-1 rounded-md border p-2" />
+									<button @click.prevent="addBeaconToEdit" class="px-3 py-2 bg-primary text-white rounded-md">Agregar</button>
+								</div>
+								<div class="flex gap-2 flex-wrap mt-2">
+									<span v-for="(b, idx) in editTemp.beacons" :key="b" class="inline-flex items-center gap-2 bg-white border border-gray-200 px-3 py-1 rounded-md text-sm">
+										{{ b }}
+										<button @click.prevent="removeBeaconFromEdit(idx)" class="ml-1 text-sm text-destructive">✕</button>
+									</span>
+								</div>
 
-									<!-- Notas adicionales -->
+								<!-- Notas adicionales -->
 									<label class="block text-sm font-medium mt-3">Notas Adicionales</label>
 									<textarea v-model="editTemp.notes" placeholder="Información adicional sobre el animal..." class="w-full rounded-md border p-3 h-28"></textarea>
 								</template>
