@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, reactive } from 'vue'
 import { useRoute } from 'vue-router'
+import { useUser } from '@/composables/useUser'
+import { listVacas, getVacasByUser, createVaca, createCowWithImage, updateVaca, deleteVaca, type Cow } from '@/services/Cows'
+import { getZonesByUser, type Zone } from '@/services/Zones'
+import { updateTag } from '@/services/Tags'
 import {
 	Beef,
 	Search,
@@ -56,181 +60,21 @@ type Cattle = {
 	behaviorStats?: BehaviorStats
 	notes?: string
 	beacons?: string[]
+	ear_tag?: string
+	favorite_food?: string
+	tag_id?: number
 }
 
-const mockCattle: Cattle[] = [
-	{
-		id: 1,
-		tag: 'El Pinto',
-		image: '/images/Vaca.jpeg',
-		zone: 'Establo A',
-		lastSeen: 'Hace 2 minutos',
-		notes: 'Ganado tranquilo, sin observaciones',
-		beacons: ['BCN-001'],
-		behaviorStats: {
-			mostVisitedZones: [
-				{ zone: 'Establo A', percentage: 45, visits: 28 },
-				{ zone: 'Área de Alimentación', percentage: 30, visits: 18 },
-				{ zone: 'Zona de Agua', percentage: 25, visits: 15 },
-			],
-			waterFrequency: 'Cada 3 horas',
-			feedingPreference: [
-				{ type: 'Alimento tipo A', percentage: 65 },
-				{ type: 'Alimento tipo B', percentage: 35 },
-			],
-			activityPattern: 'Más activo durante la mañana (6am-11am) y tarde (4pm-7pm)',
-			lastActivities: [
-				{ time: 'Hace 2 min', zone: 'Establo A', action: 'Descansando en zona de descanso' },
-				{ time: 'Hace 45 min', zone: 'Zona de Agua', action: 'Bebiendo agua' },
-				{ time: 'Hace 2 horas', zone: 'Área de Alimentación', action: 'Alimentándose' },
-			],
-		},
-	},
-	{
-		id: 2,
-		tag: 'La Manchada',
-		image: '/images/Vaca.jpeg',
-		zone: 'Pastizal Norte',
-		lastSeen: 'Hace 5 minutos',
-		notes: '',
-		beacons: [],
-		behaviorStats: {
-			mostVisitedZones: [
-				{ zone: 'Pastizal Norte', percentage: 55, visits: 35 },
-				{ zone: 'Zona de Agua', percentage: 25, visits: 16 },
-				{ zone: 'Área de Alimentación', percentage: 20, visits: 12 },
-			],
-			waterFrequency: 'Cada 2.5 horas',
-			feedingPreference: [
-				{ type: 'Pasto natural', percentage: 70 },
-				{ type: 'Alimento tipo A', percentage: 30 },
-			],
-			activityPattern: 'Actividad constante durante el día, prefiere pastoreo temprano',
-			lastActivities: [
-				{ time: 'Hace 5 min', zone: 'Pastizal Norte', action: 'Pastoreando' },
-				{ time: 'Hace 1 hora', zone: 'Zona de Agua', action: 'Bebiendo agua' },
-				{ time: 'Hace 3 horas', zone: 'Pastizal Norte', action: 'Descansando' },
-			],
-		},
-	},
-	{
-		id: 3,
-		tag: 'El Toro',
-		image: '/images/Vaca.jpeg',
-		zone: 'Área de Alimentación',
-		lastSeen: 'Hace 1 minuto',
-		notes: '',
-		beacons: [],
-		behaviorStats: {
-			mostVisitedZones: [
-				{ zone: 'Área de Alimentación', percentage: 40, visits: 25 },
-				{ zone: 'Establo B', percentage: 35, visits: 22 },
-				{ zone: 'Zona de Agua', percentage: 25, visits: 16 },
-			],
-			waterFrequency: 'Cada 4 horas',
-			feedingPreference: [
-				{ type: 'Alimento tipo B', percentage: 80 },
-				{ type: 'Alimento tipo A', percentage: 20 },
-			],
-			activityPattern: 'Picos de actividad al mediodía y al atardecer',
-			lastActivities: [
-				{ time: 'Hace 1 min', zone: 'Área de Alimentación', action: 'Alimentándose' },
-				{ time: 'Hace 30 min', zone: 'Establo B', action: 'Descansando' },
-				{ time: 'Hace 2 horas', zone: 'Zona de Agua', action: 'Bebiendo agua' },
-			],
-		},
-	},
-	{ id: 4, tag: 'La Negra', image: '/images/Vaca.jpeg', zone: null, lastSeen: 'Hace 45 minutos', notes: '', beacons: [] },
-	{
-		id: 5,
-		tag: 'El Colorado',
-		image: '/images/Vaca.jpeg',
-		zone: 'Pastizal Sur',
-		lastSeen: 'Hace 3 minutos',
-		notes: '',
-		beacons: [],
-		behaviorStats: {
-			mostVisitedZones: [
-				{ zone: 'Pastizal Sur', percentage: 60, visits: 38 },
-				{ zone: 'Zona de Agua', percentage: 22, visits: 14 },
-				{ zone: 'Área de Alimentación', percentage: 18, visits: 11 },
-			],
-			waterFrequency: 'Cada 3.5 horas',
-			feedingPreference: [
-				{ type: 'Pasto natural', percentage: 85 },
-				{ type: 'Alimento tipo A', percentage: 15 },
-			],
-			activityPattern: 'Prefiere pastoreo durante todo el día, menos activo al mediodía',
-			lastActivities: [
-				{ time: 'Hace 3 min', zone: 'Pastizal Sur', action: 'Pastoreando' },
-				{ time: 'Hace 1 hora', zone: 'Zona de Agua', action: 'Bebiendo agua' },
-				{ time: 'Hace 4 horas', zone: 'Pastizal Sur', action: 'Descansando bajo sombra' },
-			],
-		},
-	},
-	{
-		id: 6,
-		tag: 'La Blanca',
-		image: '/images/Vaca.jpeg',
-		zone: 'Establo B',
-		lastSeen: 'Hace 8 minutos',
-		notes: '',
-		beacons: [],
-		behaviorStats: {
-			mostVisitedZones: [
-				{ zone: 'Establo B', percentage: 50, visits: 31 },
-				{ zone: 'Área de Alimentación', percentage: 28, visits: 17 },
-				{ zone: 'Zona de Agua', percentage: 22, visits: 14 },
-			],
-			waterFrequency: 'Cada 3 horas',
-			feedingPreference: [
-				{ type: 'Alimento tipo A', percentage: 55 },
-				{ type: 'Alimento tipo B', percentage: 45 },
-			],
-			activityPattern: 'Rutina estable, prefiere permanecer en zonas cubiertas',
-			lastActivities: [
-				{ time: 'Hace 8 min', zone: 'Establo B', action: 'Descansando' },
-				{ time: 'Hace 1 hora', zone: 'Área de Alimentación', action: 'Alimentándose' },
-				{ time: 'Hace 2 horas', zone: 'Zona de Agua', action: 'Bebiendo agua' },
-			],
-		},
-	},
-	{ id: 7, tag: 'El Chico', image: '/images/Vaca.jpeg', zone: null, lastSeen: 'Hace 1 hora', notes: '', beacons: [] },
-	{
-		id: 8,
-		tag: 'La Grande',
-		image: '/images/Vaca.jpeg',
-		zone: 'Pastizal Norte',
-		lastSeen: 'Hace 4 minutos',
-		notes: '',
-		beacons: [],
-		behaviorStats: {
-			mostVisitedZones: [
-				{ zone: 'Pastizal Norte', percentage: 48, visits: 30 },
-				{ zone: 'Zona de Agua', percentage: 30, visits: 19 },
-				{ zone: 'Área de Alimentación', percentage: 22, visits: 14 },
-			],
-			waterFrequency: 'Cada 2 horas',
-			feedingPreference: [
-				{ type: 'Pasto natural', percentage: 60 },
-				{ type: 'Alimento tipo A', percentage: 40 },
-			],
-			activityPattern: 'Alta actividad durante todo el día, requiere hidratación frecuente',
-			lastActivities: [
-				{ time: 'Hace 4 min', zone: 'Pastizal Norte', action: 'Pastoreando' },
-				{ time: 'Hace 45 min', zone: 'Zona de Agua', action: 'Bebiendo agua' },
-				{ time: 'Hace 2 horas', zone: 'Área de Alimentación', action: 'Alimentándose' },
-			],
-		},
-	},
-]
-
 const route = useRoute()
+const { userId, loadUser } = useUser()
 
 const searchQuery = ref('')
 const zoneFilter = ref<string>('all')
 const viewMode = ref<'grid' | 'list'>('grid')
-const cattleList = ref<Cattle[]>([...mockCattle])
+const cattleList = ref<Cattle[]>([])
+const availableZones = ref<Zone[]>([])
+const isLoading = ref(false)
+const error = ref<string | null>(null)
 const selectedCattle = ref<Cattle | null>(null)
 
 const detailModalOpen = ref(false)
@@ -241,7 +85,8 @@ const deleteDialogOpen = ref(false)
 const cattleToEdit = ref<Cattle | null>(null)
 const cattleToDelete = ref<Cattle | null>(null)
 
-const zones = computed(() => Array.from(new Set(cattleList.value.filter((c) => c.zone).map((c) => c.zone as string))) as string[])
+// Usar las zonas disponibles del usuario en lugar de las zonas de los animales
+const zones = computed(() => availableZones.value.map(z => z.name))
 
 // temp state for add / edit dialogs (avoid nullable types in v-models)
 const tempAdd = reactive({ tag: '', image: '', zone: '', notes: '', beacons: [] as string[] })
@@ -263,10 +108,9 @@ const isDuplicateTag = (tag: string, excludeId?: number) => {
 }
 
 const canAdd = computed(() => {
-	// require name and a selected zone; image optional (can be blob/data/http or empty)
+	// require name; zone and image are optional
 	return (
 		tempAdd.tag.trim().length > 0 &&
-		tempAdd.zone &&
 		validateImageUrl(tempAdd.image) &&
 		!isDuplicateTag(tempAdd.tag)
 	)
@@ -276,10 +120,74 @@ const canSaveEdit = computed(() => {
 	return editTemp.id !== 0 && editTemp.tag.trim().length > 0 && validateImageUrl(editTemp.image) && !isDuplicateTag(editTemp.tag, editTemp.id)
 })
 
+// Mapear Cow de la API a Cattle del componente
+const mapCowToCattle = (cow: Cow): Cattle => {
+	console.log('%c🐄 DATOS DEL BACKEND', 'background: #222; color: #bada55; font-size: 16px; font-weight: bold; padding: 4px;')
+	console.log('ID de la vaca:', cow.id)
+	console.log('Nombre:', cow.name)
+	console.log('Tag completo:', cow.tag)
+	console.log('current_location (ZONA):', cow.tag?.current_location)
+	console.log('---')
+	
+	return {
+		id: cow.id,
+		tag: cow.name,
+		image: cow.image || '/images/Vaca.jpeg',
+		zone: cow.tag?.current_location || null,
+		lastSeen: 'Hace unos momentos',
+		notes: cow.favorite_food ? `Comida favorita: ${cow.favorite_food}` : '',
+		beacons: cow.tag ? [cow.tag.id_tag] : [],
+		ear_tag: cow.ear_tag,
+		favorite_food: cow.favorite_food,
+		tag_id: cow.tag?.id
+	}
+}
+
+// Cargar vacas desde la API
+const loadCattle = async () => {
+	isLoading.value = true
+	error.value = null
+	try {
+		let cows: Cow[]
+		// Si hay un userId válido, cargar solo sus vacas
+		if (userId.value && userId.value > 0) {
+			cows = await getVacasByUser(userId.value)
+		} else {
+			// Si no hay usuario, cargar todas las vacas
+			cows = await listVacas()
+		}
+		cattleList.value = cows.map(mapCowToCattle)
+	} catch (err) {
+		console.error('Error al cargar ganado:', err)
+		error.value = 'Error al cargar los datos del ganado'
+	} finally {
+		isLoading.value = false
+	}
+}
+
+// Cargar zonas del usuario
+const loadZones = async () => {
+	if (!userId.value || userId.value <= 0) return
+	
+	try {
+		const zones = await getZonesByUser(userId.value)
+		availableZones.value = zones
+	} catch (err) {
+		console.error('Error al cargar zonas:', err)
+	}
+}
+
 onMounted(() => {
 	const filter = route.query.filter as string | undefined
 	if (filter === 'online') zoneFilter.value = 'online'
 	else if (filter === 'offline') zoneFilter.value = 'offline'
+	
+	// Cargar usuario desde localStorage
+	loadUser()
+	
+	// Cargar zonas y datos desde la API
+	loadZones()
+	loadCattle()
 })
 
 watch(
@@ -290,6 +198,23 @@ watch(
 		else if (filter === 'offline') zoneFilter.value = 'offline'
 	},
 )
+
+// Limpiar errores cuando se abre el diálogo de agregar
+watch(addDialogOpen, (isOpen) => {
+	if (isOpen) {
+		error.value = null
+		addErrors.tag = ''
+		addErrors.image = ''
+		addErrors.zone = ''
+	}
+})
+
+// Limpiar errores cuando se abre el diálogo de eliminar
+watch(deleteDialogOpen, (isOpen) => {
+	if (isOpen) {
+		error.value = null
+	}
+})
 
 const filteredCattle = computed(() => {
 	return cattleList.value.filter((cattle) => {
@@ -306,10 +231,53 @@ const filteredCattle = computed(() => {
 	})
 })
 
-const handleAddCattle = (newCattle: Partial<Cattle>) => {
-	const id = Math.max(...cattleList.value.map((c) => c.id), 0) + 1
-	cattleList.value = [...cattleList.value, { id, tag: newCattle.tag || `Ganado ${id}`, image: newCattle.image || null, zone: newCattle.zone ?? null, lastSeen: 'Recién agregado', notes: (newCattle.notes as string) || '', beacons: (newCattle.beacons as string[]) || [] } as Cattle]
-	addDialogOpen.value = false
+const handleAddCattle = async (newCattle: Partial<Cattle>) => {
+	try {
+		isLoading.value = true
+		error.value = null
+		
+		// Verificar que tenemos userId
+		if (!userId.value || userId.value <= 0) {
+			error.value = 'No se encontró el ID de usuario. Por favor, inicia sesión nuevamente.'
+			isLoading.value = false
+			return
+		}
+		
+		// Por ahora, usaremos tag_id = 1 como ejemplo si no hay uno específico
+		// TODO: Agregar selector de tag_id en el formulario
+		const tagId = newCattle.tag_id || 1
+		
+		let createdCow: Cow
+		
+		// Si hay un archivo seleccionado, usar el endpoint REST con imagen
+		if (selectedFile.value) {
+			createdCow = await createCowWithImage(
+				tagId,
+				newCattle.tag || `Ganado ${Date.now()}`,
+				userId.value,
+				newCattle.notes || 'Sin información adicional',
+				selectedFile.value
+			)
+		} else {
+			// Si no hay imagen, usar GraphQL createVaca
+			createdCow = await createVaca({
+				nombre: newCattle.tag || `Ganado ${Date.now()}`,
+				comida_preferida: newCattle.notes || 'No especificada',
+				id_usuario: userId.value,
+				tag_id: tagId
+			})
+		}
+		
+		addDialogOpen.value = false
+		
+		// Recargar lista después de agregar
+		await loadCattle()
+	} catch (err: any) {
+		console.error('Error al agregar ganado:', err)
+		error.value = err.message || 'Error al agregar el ganado. Por favor, intenta nuevamente.'
+	} finally {
+		isLoading.value = false
+	}
 }
 
 const handleCattleClick = (cattle: Cattle) => {
@@ -335,7 +303,7 @@ const handleDeleteCattle = (cattle: Cattle) => {
 }
 
 
-const saveEditFromTemp = () => {
+const saveEditFromTemp = async () => {
 	// clear previous errors
 	editErrors.tag = ''
 	editErrors.image = ''
@@ -352,48 +320,112 @@ const saveEditFromTemp = () => {
 
 	if (editErrors.tag || editErrors.image) return
 
+	try {
+		isLoading.value = true
 		const id = editTemp.id
-		cattleList.value = cattleList.value.map((c) => (c.id === id ? { ...c, tag: editTemp.tag, image: editTemp.image || null, zone: editTemp.zone || null, notes: editTemp.notes || '', beacons: editTemp.beacons ? [...editTemp.beacons] : [] } : c))
-	editDialogOpen.value = false
-	cattleToEdit.value = null
-	editTemp.id = 0
-	editTemp.tag = ''
-	editTemp.image = ''
-	editTemp.zone = ''
+		
+		// Obtener la vaca actual para saber su tag_id
+		const currentCattle = cattleList.value.find(c => c.id === id)
+		
+		// Actualizar en la API
+		await updateVaca(id, {
+			nombre: editTemp.tag,
+			comida_preferida: editTemp.notes || undefined,
+			// tag_id se puede agregar si es necesario
+		})
+		
+		// Si la zona cambió y tenemos el tag_id, actualizar la ubicación del tag
+		if (currentCattle?.tag_id) {
+			console.log('%c📍 ACTUALIZANDO ZONA', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px;')
+			console.log('Tag ID:', currentCattle.tag_id)
+			console.log('Nueva zona:', editTemp.zone)
+			console.log('Zona vacía?', editTemp.zone === '')
+			
+			const updatePayload = {
+				current_location: editTemp.zone || undefined
+			}
+			console.log('Payload para updateTag:', updatePayload)
+			
+			try {
+				const result = await updateTag(currentCattle.tag_id, updatePayload)
+				console.log('✅ Respuesta del backend:', result)
+			} catch (tagErr: any) {
+				console.error('❌ Error al actualizar ubicación del tag:', tagErr)
+				console.error('❌ Mensaje de error:', tagErr.message)
+				error.value = `Error al actualizar la zona: ${tagErr.message}`
+				return // No continuar si falla la actualización
+			}
+		} else {
+			console.warn('⚠️ No se puede actualizar la zona: tag_id no encontrado')
+			console.log('currentCattle:', currentCattle)
+		}
+		
+		// Actualizar localmente
+		const updatedCattle = { ...currentCattle!, tag: editTemp.tag, image: editTemp.image || null, zone: editTemp.zone || null, notes: editTemp.notes || '', beacons: editTemp.beacons ? [...editTemp.beacons] : [] }
+		cattleList.value = cattleList.value.map((c) => (c.id === id ? updatedCattle : c))
+		
+		// Si el ganado editado es el que está seleccionado en detalles, actualizarlo también
+		if (selectedCattle.value?.id === id) {
+			selectedCattle.value = updatedCattle
+		}
+		
+		editDialogOpen.value = false
+		cattleToEdit.value = null
+		editTemp.id = 0
+		editTemp.tag = ''
+		editTemp.image = ''
+		editTemp.zone = ''
 		editTemp.notes = ''
 		editTemp.beacons = []
+		
+		// Recargar lista después de editar
+		await loadCattle()
+	} catch (err) {
+		console.error('Error al actualizar ganado:', err)
+		error.value = 'Error al actualizar el ganado'
+	} finally {
+		isLoading.value = false
+	}
 }
 
 const handleConfirmAdd = () => {
 	// clear errors
 	addErrors.tag = ''
 	addErrors.image = ''
+	addErrors.zone = ''
 
-		if (!tempAdd.tag || tempAdd.tag.trim() === '') addErrors.tag = 'El nombre es requerido'
-		if (!tempAdd.zone || tempAdd.zone === '') addErrors.zone = 'La zona inicial es requerida'
-		if (!validateImageUrl(tempAdd.image)) addErrors.image = 'URL de imagen inválida'
-		if (isDuplicateTag(tempAdd.tag)) addErrors.tag = 'Ya existe un animal con este nombre'
+	if (!tempAdd.tag || tempAdd.tag.trim() === '') addErrors.tag = 'El nombre es requerido'
+	if (!validateImageUrl(tempAdd.image)) addErrors.image = 'URL de imagen inválida'
+	if (isDuplicateTag(tempAdd.tag)) addErrors.tag = 'Ya existe un animal con este nombre'
 
-	if (addErrors.tag || addErrors.image) return
+	if (addErrors.tag || addErrors.image || addErrors.zone) return
 
-		handleAddCattle(tempAdd)
-		// reset
-		tempAdd.tag = ''
-		tempAdd.image = ''
-		tempAdd.zone = ''
-		tempAdd.notes = ''
-		tempAdd.beacons = []
+	handleAddCattle(tempAdd)
+	// reset
+	tempAdd.tag = ''
+	tempAdd.image = ''
+	tempAdd.zone = ''
+	tempAdd.notes = ''
+	tempAdd.beacons = []
+	selectedFile.value = null
+	if (currentAddObjectUrl) {
+		URL.revokeObjectURL(currentAddObjectUrl)
+		currentAddObjectUrl = null
+	}
 }
 
 		// file inputs for add dialog (gallery and camera)
 		const fileInputAddGallery = ref<HTMLInputElement | null>(null)
 		const fileInputAddCamera = ref<HTMLInputElement | null>(null)
+		const selectedFile = ref<File | null>(null)
 		let currentAddObjectUrl: string | null = null
 		const onAddFileSelected = (e: Event) => {
 			const input = e.target as HTMLInputElement
 			if (!input.files || input.files.length === 0) return
 			const file = input.files[0]
 			if (!file) return
+			// Guardar el archivo para enviarlo después
+			selectedFile.value = file
 			if (currentAddObjectUrl) URL.revokeObjectURL(currentAddObjectUrl)
 			currentAddObjectUrl = URL.createObjectURL(file)
 			tempAdd.image = currentAddObjectUrl
@@ -429,11 +461,32 @@ const handleConfirmAdd = () => {
 		tempAdd.beacons.splice(idx, 1)
 	}
 
-const handleConfirmDelete = () => {
-	if (cattleToDelete.value) {
-		cattleList.value = cattleList.value.filter((c) => c.id !== cattleToDelete.value!.id)
+const handleConfirmDelete = async () => {
+	if (!cattleToDelete.value) return
+	
+	try {
+		isLoading.value = true
+		error.value = null
+		
+		const idToDelete = cattleToDelete.value.id
+		
+		// Llamar a la API para eliminar
+		await deleteVaca(idToDelete)
+		
+		// Eliminar localmente
+		cattleList.value = cattleList.value.filter((c) => c.id !== idToDelete)
+		
 		deleteDialogOpen.value = false
 		cattleToDelete.value = null
+		
+		// Recargar lista para confirmar
+		await loadCattle()
+	} catch (err: any) {
+		console.error('Error al eliminar ganado:', err)
+		error.value = err.message || 'Error al eliminar el ganado. Por favor, intenta nuevamente.'
+		// Mantener el diálogo abierto para mostrar el error
+	} finally {
+		isLoading.value = false
 	}
 }
 </script>
@@ -489,8 +542,22 @@ const handleConfirmDelete = () => {
 			</div>
 		</div>
 
+		<!-- Loading State -->
+		<div v-if="isLoading" class="flex flex-col items-center justify-center py-16 text-center">
+			<div class="animate-spin h-12 w-12 border-4 border-primary border-t-transparent rounded-full mb-4"></div>
+			<p class="text-muted-foreground">Cargando ganado...</p>
+		</div>
+
+		<!-- Error State -->
+		<div v-else-if="error" class="flex flex-col items-center justify-center py-16 text-center">
+			<AlertTriangle class="h-16 w-16 text-destructive mb-4" />
+			<h3 class="text-xl font-semibold text-foreground mb-2">Error al cargar datos</h3>
+			<p class="text-sm text-muted-foreground mb-6">{{ error }}</p>
+			<Button variant="outline" @click="loadCattle">Reintentar</Button>
+		</div>
+
 		<!-- Cattle Display -->
-		<div v-if="filteredCattle.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
+		<div v-else-if="filteredCattle.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
 			<Beef class="h-16 w-16 text-muted-foreground mb-4" />
 			<h3 class="text-xl font-semibold text-foreground mb-2">No se encontraron animales</h3>
 			<p class="text-sm text-muted-foreground mb-6">Intenta ajustar los filtros de búsqueda</p>
@@ -561,27 +628,27 @@ const handleConfirmDelete = () => {
 							<h3 class="font-semibold text-lg text-foreground truncate">{{ cattle.tag }}</h3>
 							<Badge variant="outline" class="text-xs">ID: {{ cattle.id }}</Badge>
 						</div>
-						<div class="flex items-center gap-4 text-sm text-muted-foreground">
-							<template v-if="cattle.zone">
-								<div class="flex items-center gap-1">
-									<MapPin class="h-4 w-4 text-primary" />
-									<span>{{ cattle.zone }}</span>
-								</div>
-								<span>•</span>
-								<span>{{ cattle.lastSeen }}</span>
-							</template>
-							<template v-else>
-								<div class="flex items-center gap-1 text-destructive">
-									<AlertTriangle class="h-4 w-4" />
-									<span class="font-medium">Sin señal - {{ cattle.lastSeen }}</span>
-								</div>
-							</template>
-						</div>
+					<div class="flex items-center gap-4 text-sm text-muted-foreground">
+						<template v-if="cattle.zone">
+							<div class="flex items-center gap-1">
+								<MapPin class="h-4 w-4 text-primary" />
+								<span>{{ cattle.zone }}</span>
+							</div>
+							<span>•</span>
+							<span>{{ cattle.lastSeen }}</span>
+						</template>
+						<template v-else>
+							<div class="flex items-center gap-1 text-destructive">
+								<AlertTriangle class="h-4 w-4" />
+								<span class="font-medium">Sin señal - {{ cattle.lastSeen }}</span>
+							</div>
+						</template>
 					</div>
+				</div>
 
 					  <div class="shrink-0">
-						<Badge v-if="cattle.zone" class="bg-primary/10 text-primary hover:bg-primary/20">En línea</Badge>
-						<Badge v-else variant="destructive">Sin señal</Badge>
+					<Badge v-if="cattle.zone" class="bg-emerald-100 text-emerald-700">En línea</Badge>						
+					<Badge v-else variant="destructive">Sin señal</Badge>
 					</div>
 
 					  <div class="flex gap-2 shrink-0">
@@ -720,7 +787,7 @@ const handleConfirmDelete = () => {
 
 		<!-- Add Dialog -->
 			<Dialog v-model:open="addDialogOpen">
-				<DialogContent>
+				<DialogContent class="max-h-[90vh] overflow-y-auto">
 					<DialogHeader>
 						<DialogTitle>Registrar Nuevo Ganado</DialogTitle>
 						<DialogDescription>Completa la información del animal para agregarlo al sistema de monitoreo.</DialogDescription>
@@ -741,21 +808,22 @@ const handleConfirmDelete = () => {
 							<div class="text-xs !bg-white">Si no se especifica, se generará un ID automáticamente</div>
 						</div>
 
-						<!-- Zona inicial (select) -->
+						<!-- Zona inicial (select) - OPCIONAL -->
 						<div>
-							<label class="block text-sm font-medium mt-3">Zona Inicial <span class="text-destructive">*</span></label>
+							<label class="block text-sm font-medium mt-3">Zona Inicial (opcional)</label>
 							<Select v-model="tempAdd.zone">
 								<SelectTrigger class="w-full">
-									<SelectValue placeholder="Selecciona una zona" />
+									<SelectValue placeholder="Selecciona una zona (opcional)" />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="">Selecciona una zona</SelectItem>
+									<SelectItem value="">Sin zona asignada</SelectItem>
 									<template v-for="z in zones" :key="z">
 										<SelectItem :value="z">{{ z }}</SelectItem>
 									</template>
 								</SelectContent>
 							</Select>
 							<div v-if="addErrors.zone" class="text-destructive text-sm mt-1">{{ addErrors.zone }}</div>
+							<div class="text-xs text-muted-foreground mt-1">Puedes asignar una zona más tarde</div>
 						</div>
 
 						<!-- Imagen: gallery / camera boxes -->
@@ -798,11 +866,19 @@ const handleConfirmDelete = () => {
 
 					<label class="block text-sm font-medium mt-3">Notas Adicionales</label>
 						<textarea v-model="tempAdd.notes" placeholder="Información adicional sobre el animal..." class="w-full rounded-md border p-3 h-24"></textarea>
+						
+						<!-- Error message -->
+						<div v-if="error" class="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
+							<p class="text-sm text-red-600">{{ error }}</p>
+						</div>
 					</div>
 
 					<DialogFooter>
 						<Button variant="outline" @click="addDialogOpen = false">Cancelar</Button>
-						<Button :disabled="!canAdd" @click="handleConfirmAdd" class="bg-primary text-primary-foreground hover:bg-primary/90">Registrar Ganado</Button>
+						<Button :disabled="!canAdd || isLoading" @click="handleConfirmAdd" class="bg-primary text-primary-foreground hover:bg-primary/90">
+							<span v-if="isLoading">Agregando...</span>
+							<span v-else>Registrar Ganado</span>
+						</Button>
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
@@ -822,16 +898,27 @@ const handleConfirmDelete = () => {
 									<Input class="!bg-white" v-model="editTemp.tag" placeholder="Nombre / Apodo" />
 									<div v-if="editErrors.tag" class="text-destructive text-sm mt-1 ">{{ editErrors.tag }}</div>
 
-									<!-- ID (no editable) -->
-									<label class="block text-sm font-medium mt-3">ID del Animal</label>
-									<input class="w-full rounded-md border p-2 !bg-white" :value="editTemp.id" disabled />
-									<div class="text-xs text-muted-foreground mt-1">El ID no se puede modificar</div>
+								<!-- ID (no editable) -->
+								<label class="block text-sm font-medium mt-3">ID del Animal</label>
+								<input class="w-full rounded-md border p-2 !bg-white" :value="editTemp.id" disabled />
+								<div class="text-xs text-muted-foreground mt-1">El ID no se puede modificar</div>
 
-									<!-- Zona -->
-									<label class="block text-sm font-medium mt-3">Zona Actual <span class="text-destructive">*</span></label>
-									<Input class="!bg-white" v-model="editTemp.zone" placeholder="Zona (opcional)" />
+								<!-- Zona Actual (select) -->
+								<label class="block text-sm font-medium mt-3">Zona Actual</label>
+								<Select v-model="editTemp.zone">
+									<SelectTrigger class="w-full">
+										<SelectValue placeholder="Selecciona una zona (opcional)" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="">Sin zona asignada</SelectItem>
+										<template v-for="z in zones" :key="z">
+											<SelectItem :value="z">{{ z }}</SelectItem>
+										</template>
+									</SelectContent>
+								</Select>
+								<div class="text-xs text-muted-foreground mt-1">La zona se actualiza automáticamente según el tag</div>
 
-									<!-- Imagen preview con boton eliminar -->
+								<!-- Imagen preview con boton eliminar -->
 									<label class="block text-sm font-medium mt-3">Imagen del Animal</label>
 									<div class="relative mt-2">
 										<img :src="editTemp.image || '/images/Vaca.jpeg'" alt="preview" class="w-full h-40 object-cover rounded-lg" />
@@ -869,12 +956,22 @@ const handleConfirmDelete = () => {
 			<AlertDialogContent>
 				<AlertDialogHeader>
 					<AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-					<AlertDialogDescription>Esta acción eliminará permanentemente el animal seleccionado.</AlertDialogDescription>
+					<AlertDialogDescription>
+						Esta acción eliminará permanentemente el animal "{{ cattleToDelete?.tag }}" (ID: {{ cattleToDelete?.id }}).
+					</AlertDialogDescription>
 				</AlertDialogHeader>
 
+				<!-- Error message -->
+				<div v-if="error && deleteDialogOpen" class="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
+					<p class="text-sm text-red-600">{{ error }}</p>
+				</div>
+
 				<AlertDialogFooter>
-					<AlertDialogCancel>Cancelar</AlertDialogCancel>
-					<AlertDialogAction variant="destructive" @click="handleConfirmDelete">Eliminar</AlertDialogAction>
+					<AlertDialogCancel :disabled="isLoading">Cancelar</AlertDialogCancel>
+					<AlertDialogAction variant="destructive" @click="handleConfirmDelete" :disabled="isLoading">
+						<span v-if="isLoading">Eliminando...</span>
+						<span v-else>Eliminar</span>
+					</AlertDialogAction>
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>
