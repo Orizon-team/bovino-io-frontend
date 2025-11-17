@@ -16,6 +16,8 @@ import {
 	AlertTriangle,
 	Pencil,
 	Trash2,
+	Droplet,
+	Wheat,
 } from 'lucide-vue-next'
 
 import { Input } from '@/components/ui/input'
@@ -709,19 +711,21 @@ const handleConfirmDelete = async () => {
 						<!-- Zones card full width -->
 						<div class="mt-6">
 							<Card class="rounded-lg">
-								<CardContent>
-									<div class="flex items-center gap-2 mb-3">
+								<CardContent class="p-6">
+									<div class="flex items-center gap-2 mb-4">
 										<MapPin class="h-5 w-5 text-primary" />
-										<h4 class="text-lg font-medium">Zonas Más Visitadas</h4>
+										<h4 class="text-lg font-semibold">Zonas Más Visitadas</h4>
 									</div>
 
 									<div class="space-y-4">
 										<template v-for="(z) in selectedCattle?.behaviorStats?.mostVisitedZones || []" :key="z.zone">
-											<div class="flex items-center justify-between">
-												<div class="text-sm font-medium">{{ z.zone }}</div>
-												<div class="text-sm text-muted-foreground">{{ z.percentage }}% ({{ z.visits }} visitas)</div>
+											<div>
+												<div class="flex items-center justify-between mb-2">
+													<div class="text-sm font-medium">{{ z.zone }}</div>
+													<div class="text-sm text-muted-foreground">{{ z.percentage }}% ({{ z.visits }} visitas)</div>
+												</div>
+												<Progress :modelValue="z.percentage" class="h-3 rounded-full [&>div]:bg-emerald-700 [&>div]:rounded-full" />
 											</div>
-											<Progress :modelValue="z.percentage" class="h-3 rounded-full [&>div]:bg-emerald-700 [&>div]:rounded-full" />
 										</template>
 									</div>
 								</CardContent>
@@ -732,20 +736,26 @@ const handleConfirmDelete = async () => {
 						<div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
 							<Card>
 								<CardContent class="p-6">
-									<div class="text-sm text-muted-foreground">Consumo de Agua</div>
-									<div class="text-2xl font-bold mt-3">{{ selectedCattle?.behaviorStats?.waterFrequency || 'N/D' }}</div>
+									<div class="flex items-center gap-2 text-sm text-primary mb-3">
+										<Droplet class="h-5 w-5" />
+										<span class="font-medium">Consumo de Agua</span>
+									</div>
+									<div class="text-3xl font-bold mt-2">{{ selectedCattle?.behaviorStats?.waterFrequency || 'N/D' }}</div>
 									<div class="text-xs text-muted-foreground mt-1">Frecuencia promedio</div>
 								</CardContent>
 							</Card>
 
 							<Card>
 								<CardContent class="p-6">
-									<div class="text-sm text-muted-foreground">Preferencia de Alimentación</div>
+									<div class="flex items-center gap-2 text-sm text-amber-600 mb-3">
+										<Wheat class="h-5 w-5" />
+										<span class="font-medium">Preferencia de Alimentación</span>
+									</div>
 									<div class="mt-3 space-y-2">
 										<template v-for="(p) in selectedCattle?.behaviorStats?.feedingPreference || []" :key="p.type">
 											<div class="flex items-center justify-between text-sm">
 												<div>{{ p.type }}</div>
-												<div class="font-medium">{{ p.percentage }}%</div>
+												<div class="font-semibold">{{ p.percentage }}%</div>
 											</div>
 										</template>
 									</div>
@@ -757,21 +767,24 @@ const handleConfirmDelete = async () => {
 						<div class="mt-6 grid grid-cols-1 gap-4">
 							<Card>
 								<CardContent class="p-6">
-									<div class="flex items-center justify-between">
+									<div class="space-y-4">
 										<div>
-									<div class="text-sm text-muted-foreground">Beacons asignados</div>
-									<div class="mt-2 flex gap-2 flex-wrap">
-										<template v-for="b in selectedCattle?.beacons || []" :key="b">
-											<span class="inline-flex items-center gap-2 bg-white border border-gray-200 px-3 py-1 rounded-md text-sm">{{ b }}</span>
-										</template>
-										<template v-if="!(selectedCattle?.beacons && selectedCattle.beacons.length)">
-										<span class="text-sm text-muted-foreground">No hay beacons asignados</span>
-										</template>
-									</div>
+											<div class="text-sm font-semibold text-foreground mb-2">Beacons asignados</div>
+											<div class="flex gap-2 flex-wrap">
+												<template v-for="b in selectedCattle?.beacons || []" :key="b">
+													<span class="inline-flex items-center gap-2 bg-secondary border border-border px-3 py-1 rounded-md text-sm font-medium">{{ b }}</span>
+												</template>
+												<template v-if="!(selectedCattle?.beacons && selectedCattle.beacons.length)">
+													<span class="text-sm text-muted-foreground">No hay beacons asignados</span>
+												</template>
+											</div>
+										</div>
+										
+										<div>
+											<div class="text-sm font-semibold text-foreground mb-2">Notas</div>
+											<div class="text-sm text-muted-foreground">{{ selectedCattle?.notes || 'Sin notas' }}</div>
 										</div>
 									</div>
-									<div class="mt-3 text-sm text-muted-foreground">Notas</div>
-									<div class="mt-2">{{ selectedCattle?.notes || 'Sin notas' }}</div>
 								</CardContent>
 							</Card>
 						</div>
