@@ -2,9 +2,9 @@
 import { ref, computed, onMounted, watch, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUser } from '@/composables/useUser'
-import { listVacas, getVacasByUser, createVaca, createCowWithImage, updateVaca, deleteVaca, type Cow } from '@/services/Cows'
+import { listVacas, getVacasByUser, getVacaById, createVaca, createCowWithImage, updateVaca, deleteVaca, type Cow } from '@/services/Cows'
 import { getZonesByUser, type Zone } from '@/services/Zones'
-import { updateTag } from '@/services/Tags'
+import { updateTag, createTag } from '@/services/Tags'
 import {
 	Beef,
 	Search,
@@ -98,10 +98,22 @@ const editTemp = reactive({ id: 0, tag: '', image: '', zone: '', notes: '', beac
 const addErrors = reactive({ tag: '', image: '', zone: '' })
 const editErrors = reactive({ tag: '', image: '' })
 
+// Flag de mitigación: si true, NO llamamos a updateTag (evita cambios globales si el backend está roto)
+// Poner en `false` para permitir persistencia en backend.
+const DISABLE_TAG_UPDATE = false
+
 const validateImageUrl = (url?: string) => {
 	if (!url) return true
 	// allow relative paths starting with /, http(s), blob or data URLs (for local file previews)
 	return /^\/|^https?:\/\/|^blob:|^data:/.test(url)
+}
+
+// Generar un id_tag válido para el backend: cadena numérica (10-12 dígitos)
+const generateNumericTagId = (): string => {
+	// usar timestamp + 3 dígitos aleatorios para minimizar colisiones
+	const timestampPart = (Date.now() % 10000000000).toString().padStart(10, '0')
+	const randPart = Math.floor(Math.random() * 900 + 100).toString() // 3 dígitos
+	return `${timestampPart}${randPart}`
 }
 
 const isDuplicateTag = (tag: string, excludeId?: number) => {
@@ -159,6 +171,27 @@ const loadCattle = async () => {
 			cows = await listVacas()
 		}
 		cattleList.value = cows.map(mapCowToCattle)
+		
+		// 🔍 VERIFICACIÓN: Asegurar que cada vaca tiene su propio tag único
+		console.log('%c📊 VERIFICACIÓN DE TAGS ÚNICOS', 'background: #2196F3; color: white; font-size: 16px; font-weight: bold; padding: 6px;')
+		console.table(cattleList.value.map(c => ({
+			'ID Vaca': c.id,
+			'Nombre': c.tag,
+			'Tag ID': c.tag_id,
+			'Zona': c.zone || 'Sin zona'
+		})))
+		
+		// Verificar si hay duplicados
+		const tagIds = cattleList.value.map(c => c.tag_id).filter(Boolean)
+		const duplicates = tagIds.filter((id, index) => tagIds.indexOf(id) !== index)
+		
+		if (duplicates.length > 0) {
+			console.warn('%c⚠️ ADVERTENCIA: Tags compartidos detectados', 'background: #FF9800; color: white; font-size: 14px; padding: 4px;')
+			console.warn('Tags duplicados:', [...new Set(duplicates)])
+		} else {
+			console.log('%c✅ Perfecto: Cada vaca tiene su propio tag único', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px;')
+		}
+		
 	} catch (err) {
 		console.error('Error al cargar ganado:', err)
 		error.value = 'Error al cargar los datos del ganado'
@@ -233,6 +266,52 @@ const filteredCattle = computed(() => {
 	})
 })
 
+const fileInputAddGallery = ref<HTMLInputElement | null>(null)
+const fileInputAddCamera = ref<HTMLInputElement | null>(null)
+const selectedFile = ref<File | null>(null)
+let currentAddObjectUrl: string | null = null
+const onAddFileSelected = (e: Event) => {
+	const input = e.target as HTMLInputElement
+	if (!input.files || input.files.length === 0) return
+	const file = input.files[0]
+	if (!file) return
+	// Guardar el archivo para enviarlo después
+	selectedFile.value = file
+	if (currentAddObjectUrl) URL.revokeObjectURL(currentAddObjectUrl)
+	currentAddObjectUrl = URL.createObjectURL(file)
+	tempAdd.image = currentAddObjectUrl
+}
+const triggerAddGallery = () => fileInputAddGallery.value?.click()
+const triggerAddCamera = () => fileInputAddCamera.value?.click()
+
+// beacon helpers for add dialog
+const addBeaconInput = ref('')
+const addBeaconToTemp = () => {
+	const v = addBeaconInput.value.trim()
+	if (!v) return
+	if (!tempAdd.beacons) tempAdd.beacons = []
+	if (!tempAdd.beacons.includes(v)) tempAdd.beacons.push(v)
+	addBeaconInput.value = ''
+}
+const removeBeaconFromTemp = (idx: number) => {
+	if (!tempAdd.beacons) return
+	tempAdd.beacons.splice(idx, 1)
+}
+
+// beacon helpers for edit dialog
+const editBeaconInput = ref('')
+const addBeaconToEdit = () => {
+	const v = editBeaconInput.value.trim()
+	if (!v) return
+	if (!editTemp.beacons) editTemp.beacons = []
+	if (!editTemp.beacons.includes(v)) editTemp.beacons.push(v)
+	editBeaconInput.value = ''
+}
+const removeBeaconFromEdit = (idx: number) => {
+	if (!editTemp.beacons) return
+	editTemp.beacons.splice(idx, 1)
+}
+
 const handleAddCattle = async (newCattle: Partial<Cattle>) => {
 	try {
 		isLoading.value = true
@@ -245,16 +324,34 @@ const handleAddCattle = async (newCattle: Partial<Cattle>) => {
 			return
 		}
 		
-		// Por ahora, usaremos tag_id = 1 como ejemplo si no hay uno específico
-		// TODO: Agregar selector de tag_id en el formulario
-		const tagId = newCattle.tag_id || 1
+		console.log('%c🆕 CREANDO NUEVA VACA CON TAG ÚNICO', 'background: #4CAF50; color: white; font-size: 16px; font-weight: bold; padding: 6px;')
 		
+		// 1. CREAR UN TAG ÚNICO para esta vaca (id_tag debe ser numérico)
+		const uniqueTagId = generateNumericTagId()
+		const macAddress = `MAC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+
+		console.log('📍 Creando tag único (numérico id_tag):', uniqueTagId)
+		console.log('📡 MAC Address:', macAddress)
+		console.log('🗺️ Zona inicial:', newCattle.zone || 'Sin zona')
+		
+		const newTag = await createTag({
+			id_tag: uniqueTagId,
+			mac_address: macAddress,
+			battery_level: 100,
+			status: 'active',
+			last_transmission: new Date().toISOString(),
+			current_location: newCattle.zone || ''
+		})
+		
+		console.log('✅ Tag creado exitosamente:', newTag)
+		
+		// 2. CREAR LA VACA con el tag_id único
 		let createdCow: Cow
 		
 		// Si hay un archivo seleccionado, usar el endpoint REST con imagen
 		if (selectedFile.value) {
 			createdCow = await createCowWithImage(
-				tagId,
+				newTag.id, // Usar el ID del tag recién creado
 				newCattle.tag || `Ganado ${Date.now()}`,
 				userId.value,
 				newCattle.notes || 'Sin información adicional',
@@ -266,16 +363,19 @@ const handleAddCattle = async (newCattle: Partial<Cattle>) => {
 				nombre: newCattle.tag || `Ganado ${Date.now()}`,
 				comida_preferida: newCattle.notes || 'No especificada',
 				id_usuario: userId.value,
-				tag_id: tagId
+				tag_id: newTag.id // Usar el ID del tag recién creado
 			})
 		}
+		
+		console.log('✅ Vaca creada exitosamente:', createdCow)
+		console.log('🔗 Vaca ID:', createdCow.id, '- Tag ID:', newTag.id)
 		
 		addDialogOpen.value = false
 		
 		// Recargar lista después de agregar
 		await loadCattle()
 	} catch (err: any) {
-		console.error('Error al agregar ganado:', err)
+		console.error('❌ Error al agregar ganado:', err)
 		error.value = err.message || 'Error al agregar el ganado. Por favor, intenta nuevamente.'
 	} finally {
 		isLoading.value = false
@@ -326,51 +426,188 @@ const saveEditFromTemp = async () => {
 		isLoading.value = true
 		const id = editTemp.id
 		
-		// Obtener la vaca actual para saber su tag_id
+		// Obtener la vaca actual para saber su tag_id y zona actual
 		const currentCattle = cattleList.value.find(c => c.id === id)
 		
-		// Actualizar en la API
-		await updateVaca(id, {
+		console.log('%c🔍 EDITANDO VACA', 'background: #2196F3; color: white; font-size: 14px; font-weight: bold; padding: 4px;')
+		console.log('ID Vaca:', id)
+		console.log('Nombre nuevo:', editTemp.tag)
+		console.log('Tag ID:', currentCattle?.tag_id)
+		console.log('Zona ACTUAL:', currentCattle?.zone)
+		console.log('Zona NUEVA:', editTemp.zone)
+		console.log('¿Zona cambió?:', editTemp.zone !== currentCattle?.zone)
+		
+		// SOLO actualizar el tag si la zona REALMENTE cambió
+		if (editTemp.zone !== currentCattle?.zone) {
+			// Validaciones: asegurar tag_id válido y zona permitida
+			if (!currentCattle?.tag_id) {
+				console.warn('⚠️ Intento de actualizar zona pero tag_id no existe o es inválido', currentCattle)
+				error.value = 'No es posible actualizar la zona: tag inválido.'
+				isLoading.value = false
+				return
+			}
+
+			// Forzar a número si viene como string
+			const tagIdNum = Number(currentCattle.tag_id)
+			if (Number.isNaN(tagIdNum) || tagIdNum <= 0) {
+				console.warn('⚠️ tag_id no es un número válido:', currentCattle.tag_id)
+				error.value = 'ID del tag inválido. No se puede actualizar la zona.'
+				isLoading.value = false
+				return
+			}
+
+			// Validar que la nueva zona exista en las zonas disponibles (o esté vacía para quitar zona)
+			const availableZoneNames = availableZones.value.map(z => z.name)
+			if (editTemp.zone !== '' && !availableZoneNames.includes(editTemp.zone)) {
+				console.warn('⚠️ Zona seleccionada no existe en las zonas del usuario:', editTemp.zone)
+				error.value = 'La zona seleccionada no es válida.'
+				isLoading.value = false
+				return
+			}
+
+			// ahora sí usamos tagIdNum para la petición
+			const effectiveTagId = tagIdNum
+
+			console.log('¿Zona cambió?:', editTemp.zone !== currentCattle?.zone)
+
+			if (effectiveTagId) {
+				// Contar si este tag está siendo usado por otras vacas
+				const tagUsageCount = cattleList.value.filter(c => c.tag_id === currentCattle?.tag_id).length
+				console.log('Uso del tag por vacas en la lista:', tagUsageCount)
+
+				// Si el tag está compartido, NO actualizamos el tag global (evita cambiar la zona para otras vacas)
+				// En su lugar, creamos un tag nuevo y se lo asignamos sólo a esta vaca
+				if (tagUsageCount > 1) {
+					console.log('%c🔁 Tag compartido detectado — creando tag nuevo y asignando sólo a esta vaca', 'background:#FFC107;color:#000;padding:4px')
+					try {
+						const newTagPayload = {
+							id_tag: generateNumericTagId(),
+							mac_address: `MAC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+							battery_level: 100,
+							status: 'active',
+							last_transmission: new Date().toISOString(),
+							current_location: editTemp.zone === '' || editTemp.zone === null ? '' : editTemp.zone,
+						}
+						console.log('📤 Payload new tag:', JSON.stringify(newTagPayload, null, 2))
+						const created = await createTag(newTagPayload)
+						console.log('✅ Tag nuevo creado:', created)
+						// guardar el nuevo tag id para usarlo al actualizar la vaca más abajo
+						// (marcamos editTemp._newTagId temporalmente)
+						;(editTemp as any)._newTagId = created.id
+					} catch (createErr: any) {
+						console.error('❌ Error al crear tag nuevo:', createErr)
+						error.value = `Error al crear tag temporal: ${createErr.message}`
+						isLoading.value = false
+						return
+					}
+				} else {
+					// Tag único: es seguro actualizar el tag directamente
+					if (!DISABLE_TAG_UPDATE) {
+						console.log('%c📍 ACTUALIZANDO ZONA DEL TAG (único)', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px;')
+						const updatePayload: { current_location?: string } = {}
+						updatePayload.current_location = editTemp.zone === '' || editTemp.zone === null ? '' : editTemp.zone
+						console.log('📤 Payload enviado al backend:', JSON.stringify(updatePayload, null, 2))
+						try {
+							const result = await updateTag(effectiveTagId, updatePayload)
+							console.log('✅ Tag actualizado correctamente:', result)
+							console.log('Nueva ubicación del tag:', result.current_location)
+						} catch (tagErr: any) {
+							console.error('❌ Error al actualizar ubicación del tag:', tagErr)
+							error.value = `Error al actualizar la zona: ${tagErr.message}`
+							isLoading.value = false
+							return
+						}
+					} else {
+						console.warn('⚠️ DISABLED: updateTag está deshabilitado por DISABLE_TAG_UPDATE=true — no se persistirá la zona en el backend')
+					}
+				}
+			}
+		} else if (!currentCattle?.tag_id) {
+			console.warn('⚠️ Esta vaca no tiene tag_id asignado')
+		} else {
+			console.log('ℹ️ La zona no cambió, no es necesario actualizar el tag')
+		}
+		
+		// Actualizar los datos de la vaca (nombre, comida favorita)
+		console.log('%c🐄 ACTUALIZANDO DATOS DE LA VACA', 'background: #FF9800; color: white; font-size: 14px; padding: 4px;')
+		// Preparar payload de actualización de vaca. Si creamos un tag nuevo, asignarlo aquí.
+		const vacaUpdatePayload: any = {
 			nombre: editTemp.tag,
 			comida_preferida: editTemp.notes || undefined,
-			// tag_id se puede agregar si es necesario
-		})
-		
-		// Si la zona cambió y tenemos el tag_id, actualizar la ubicación del tag
-		if (currentCattle?.tag_id) {
-			console.log('%c📍 ACTUALIZANDO ZONA', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px;')
-			console.log('Tag ID:', currentCattle.tag_id)
-			console.log('Nueva zona:', editTemp.zone)
-			console.log('Zona vacía?', editTemp.zone === '')
-			
-			const updatePayload = {
-				current_location: editTemp.zone || undefined
-			}
-			console.log('Payload para updateTag:', updatePayload)
-			
+		}
+		if ((editTemp as any)._newTagId) {
+			vacaUpdatePayload.tag_id = (editTemp as any)._newTagId
+			console.log('Asignando nuevo tag_id a la vaca en updateVaca:', vacaUpdatePayload.tag_id)
+		}
+		await updateVaca(id, vacaUpdatePayload)
+		console.log('✅ Datos de la vaca actualizados')
+
+		if (!DISABLE_TAG_UPDATE) {
+			// Intentar obtener la vaca actualizada desde el backend para asegurar persistencia
 			try {
-				const result = await updateTag(currentCattle.tag_id, updatePayload)
-				console.log('✅ Respuesta del backend:', result)
-			} catch (tagErr: any) {
-				console.error('❌ Error al actualizar ubicación del tag:', tagErr)
-				console.error('❌ Mensaje de error:', tagErr.message)
-				error.value = `Error al actualizar la zona: ${tagErr.message}`
-				return // No continuar si falla la actualización
+				const freshCow = await getVacaById(id)
+				if (freshCow) {
+					const mapped = mapCowToCattle(freshCow)
+					cattleList.value = cattleList.value.map(c => (c.id === id ? mapped : c))
+					// actualizar selectedCattle si está abierto
+					if (selectedCattle.value && selectedCattle.value.id === id) {
+						selectedCattle.value = { ...selectedCattle.value, ...mapped }
+					}
+					console.log('%c🔄 Estado sincronizado con backend (vaca recargada)', 'background:#4CAF50;color:white;padding:4px', mapped)
+				} else {
+					console.warn('No se obtuvo la vaca actualizada del backend')
+				}
+			} catch (fetchErr: any) {
+				console.error('Error al obtener la vaca actualizada del backend:', fetchErr)
+				// como fallback, actualizar localmente para que el usuario vea los cambios
+				try {
+					const updatedCattle = {
+						id,
+						tag: editTemp.tag,
+						image: editTemp.image || currentCattle?.image || '/images/Vaca.jpeg',
+						zone: editTemp.zone === '' ? null : editTemp.zone,
+						lastSeen: currentCattle?.lastSeen || 'Hace unos momentos',
+						notes: editTemp.notes || currentCattle?.notes || '',
+						beacons: editTemp.beacons && editTemp.beacons.length ? [...editTemp.beacons] : currentCattle?.beacons || [],
+						ear_tag: currentCattle?.ear_tag,
+						favorite_food: currentCattle?.favorite_food,
+						tag_id: currentCattle?.tag_id,
+					}
+
+					cattleList.value = cattleList.value.map(c => c.id === id ? updatedCattle : c)
+					if (selectedCattle.value && selectedCattle.value.id === id) {
+						selectedCattle.value = { ...selectedCattle.value, ...updatedCattle }
+					}
+				} catch (updateLocalErr) {
+					console.warn('No se pudo actualizar localmente la vaca como fallback:', updateLocalErr)
+				}
 			}
 		} else {
-			console.warn('⚠️ No se puede actualizar la zona: tag_id no encontrado')
-			console.log('currentCattle:', currentCattle)
+			// DISABLE_TAG_UPDATE = true -> no persistimos la zona en backend; aplicamos update local como comportamiento seguro
+			console.warn('⚠️ DISABLE_TAG_UPDATE está activo: aplicando cambio de zona SOLO localmente (no se persistirá en backend)')
+			try {
+				const updatedCattle = {
+					id,
+					tag: editTemp.tag,
+					image: editTemp.image || currentCattle?.image || '/images/Vaca.jpeg',
+					zone: editTemp.zone === '' ? null : editTemp.zone,
+					lastSeen: currentCattle?.lastSeen || 'Hace unos momentos',
+					notes: editTemp.notes || currentCattle?.notes || '',
+					beacons: editTemp.beacons && editTemp.beacons.length ? [...editTemp.beacons] : currentCattle?.beacons || [],
+					ear_tag: currentCattle?.ear_tag,
+					favorite_food: currentCattle?.favorite_food,
+					tag_id: currentCattle?.tag_id,
+				}
+
+				cattleList.value = cattleList.value.map(c => c.id === id ? updatedCattle : c)
+				if (selectedCattle.value && selectedCattle.value.id === id) {
+					selectedCattle.value = { ...selectedCattle.value, ...updatedCattle }
+				}
+			} catch (updateLocalErr) {
+				console.warn('No se pudo actualizar localmente la vaca al aplicar DISABLE_TAG_UPDATE:', updateLocalErr)
+			}
 		}
-		
-		// Actualizar localmente
-		const updatedCattle = { ...currentCattle!, tag: editTemp.tag, image: editTemp.image || null, zone: editTemp.zone || null, notes: editTemp.notes || '', beacons: editTemp.beacons ? [...editTemp.beacons] : [] }
-		cattleList.value = cattleList.value.map((c) => (c.id === id ? updatedCattle : c))
-		
-		// Si el ganado editado es el que está seleccionado en detalles, actualizarlo también
-		if (selectedCattle.value?.id === id) {
-			selectedCattle.value = updatedCattle
-		}
-		
+
 		editDialogOpen.value = false
 		cattleToEdit.value = null
 		editTemp.id = 0
@@ -379,18 +616,17 @@ const saveEditFromTemp = async () => {
 		editTemp.zone = ''
 		editTemp.notes = ''
 		editTemp.beacons = []
-		
-		// Recargar lista después de editar
-		await loadCattle()
-	} catch (err) {
-		console.error('Error al actualizar ganado:', err)
-		error.value = 'Error al actualizar el ganado'
+		// limpiar cualquier tag temporal creado durante la edición
+		if ((editTemp as any)._newTagId) delete (editTemp as any)._newTagId
+	} catch (err: any) {
+		console.error('Error al guardar la edición:', err)
+		error.value = err.message || 'Error al actualizar la vaca.'
 	} finally {
 		isLoading.value = false
 	}
 }
 
-const handleConfirmAdd = () => {
+const handleConfirmAdd = async () => {
 	// clear errors
 	addErrors.tag = ''
 	addErrors.image = ''
@@ -398,70 +634,39 @@ const handleConfirmAdd = () => {
 
 	if (!tempAdd.tag || tempAdd.tag.trim() === '') addErrors.tag = 'El nombre es requerido'
 	if (!validateImageUrl(tempAdd.image)) addErrors.image = 'URL de imagen inválida'
-	if (isDuplicateTag(tempAdd.tag)) addErrors.tag = 'Ya existe un animal con este nombre'
 
+	// stop if validation errors
 	if (addErrors.tag || addErrors.image || addErrors.zone) return
 
-	handleAddCattle(tempAdd)
-	// reset
-	tempAdd.tag = ''
-	tempAdd.image = ''
-	tempAdd.zone = ''
-	tempAdd.notes = ''
-	tempAdd.beacons = []
-	selectedFile.value = null
-	if (currentAddObjectUrl) {
-		URL.revokeObjectURL(currentAddObjectUrl)
-		currentAddObjectUrl = null
+	try {
+		isLoading.value = true
+		// Reuse central handler that creates tag and cow (handles selectedFile and userId)
+		await handleAddCattle({
+			tag: tempAdd.tag,
+			image: tempAdd.image,
+			zone: tempAdd.zone,
+			notes: tempAdd.notes,
+			beacons: tempAdd.beacons,
+		})
+
+		// Reset temporary add form
+		tempAdd.tag = ''
+		tempAdd.image = ''
+		tempAdd.zone = ''
+		tempAdd.notes = ''
+		tempAdd.beacons = []
+
+		// revoke object URL if any
+		if (currentAddObjectUrl) {
+			URL.revokeObjectURL(currentAddObjectUrl)
+			currentAddObjectUrl = null
+		}
+	} catch (err) {
+		// handleAddCattle already sets error, nothing extra required here
+	} finally {
+		isLoading.value = false
 	}
 }
-
-		// file inputs for add dialog (gallery and camera)
-		const fileInputAddGallery = ref<HTMLInputElement | null>(null)
-		const fileInputAddCamera = ref<HTMLInputElement | null>(null)
-		const selectedFile = ref<File | null>(null)
-		let currentAddObjectUrl: string | null = null
-		const onAddFileSelected = (e: Event) => {
-			const input = e.target as HTMLInputElement
-			if (!input.files || input.files.length === 0) return
-			const file = input.files[0]
-			if (!file) return
-			// Guardar el archivo para enviarlo después
-			selectedFile.value = file
-			if (currentAddObjectUrl) URL.revokeObjectURL(currentAddObjectUrl)
-			currentAddObjectUrl = URL.createObjectURL(file)
-			tempAdd.image = currentAddObjectUrl
-		}
-		const triggerAddGallery = () => fileInputAddGallery.value?.click()
-		const triggerAddCamera = () => fileInputAddCamera.value?.click()
-
-	// beacon helpers for edit dialog
-	const editBeaconInput = ref('')
-	const addBeaconToEdit = () => {
-		const v = editBeaconInput.value.trim()
-		if (!v) return
-		if (!editTemp.beacons) editTemp.beacons = []
-		if (!editTemp.beacons.includes(v)) editTemp.beacons.push(v)
-		editBeaconInput.value = ''
-	}
-	const removeBeaconFromEdit = (idx: number) => {
-		if (!editTemp.beacons) return
-		editTemp.beacons.splice(idx, 1)
-	}
-
-	// beacon helpers for add dialog
-	const addBeaconInput = ref('')
-	const addBeaconToTemp = () => {
-		const v = addBeaconInput.value.trim()
-		if (!v) return
-		if (!tempAdd.beacons) tempAdd.beacons = []
-		if (!tempAdd.beacons.includes(v)) tempAdd.beacons.push(v)
-		addBeaconInput.value = ''
-	}
-	const removeBeaconFromTemp = (idx: number) => {
-		if (!tempAdd.beacons) return
-		tempAdd.beacons.splice(idx, 1)
-	}
 
 const handleConfirmDelete = async () => {
 	if (!cattleToDelete.value) return
@@ -511,11 +716,11 @@ const handleConfirmDelete = async () => {
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center">
 		<div class="relative flex-1 max-w-md">
 			<Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-			<Input placeholder="Buscar por nombre o ID..." v-model="searchQuery" class="pl-9 !bg-white" />
+			<Input placeholder="Buscar por nombre o ID..." v-model="searchQuery" class="pl-9 bg-white!" />
 		</div>
 
 	<Select v-model="zoneFilter">
-			<SelectTrigger class="w-[220px] !bg-white">
+			<SelectTrigger class="w-[220px] bg-white!">
 				<Filter class="h-4 w-4 mr-2" />
 				<SelectValue placeholder="Filtrar por zona">
 					<span v-if="zoneFilter === 'all'">Todas las zonas</span>
@@ -810,7 +1015,7 @@ const handleConfirmDelete = async () => {
 						<!-- Nombre / Tag -->
 						<div>
 							<label class="block text-sm font-medium">Nombre / Tag <span class="text-destructive">*</span></label>
-							<Input class="!bg-white" v-model="tempAdd.tag" placeholder="Ej: El Pinto, La Manchada..." />
+							<Input class="bg-white!" v-model="tempAdd.tag" placeholder="Ej: El Pinto, La Manchada..." />
 							<div v-if="addErrors.tag" class="text-destructive text-sm mt-1">{{ addErrors.tag }}</div>
 						</div>
 
@@ -818,7 +1023,7 @@ const handleConfirmDelete = async () => {
 						<div>
 							<label class="block text-sm font-medium mt-1">ID del Animal</label>
 							<input class="w-full rounded-md border p-2 bg-muted text-sm" placeholder="Dejar vacío para generar automáticamente" disabled />
-							<div class="text-xs !bg-white">Si no se especifica, se generará un ID automáticamente</div>
+							<div class="text-xs bg-white!">Si no se especifica, se generará un ID automáticamente</div>
 						</div>
 
 						<!-- Zona inicial (select) - OPCIONAL -->
@@ -908,12 +1113,12 @@ const handleConfirmDelete = async () => {
 								<template v-if="editTemp.id !== 0">
 									<!-- Nombre / Tag -->
 									<label class="block text-sm font-medium">Nombre / Tag <span class="text-destructive">*</span></label>
-									<Input class="!bg-white" v-model="editTemp.tag" placeholder="Nombre / Apodo" />
+									<Input class="bg-white!" v-model="editTemp.tag" placeholder="Nombre / Apodo" />
 									<div v-if="editErrors.tag" class="text-destructive text-sm mt-1 ">{{ editErrors.tag }}</div>
 
 								<!-- ID (no editable) -->
 								<label class="block text-sm font-medium mt-3">ID del Animal</label>
-								<input class="w-full rounded-md border p-2 !bg-white" :value="editTemp.id" disabled />
+								<input class="w-full rounded-md border p-2 bg-white!" :value="editTemp.id" disabled />
 								<div class="text-xs text-muted-foreground mt-1">El ID no se puede modificar</div>
 
 								<!-- Zona Actual (select) -->

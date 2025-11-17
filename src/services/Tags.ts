@@ -52,14 +52,20 @@ export async function createTag(input: CreateTagInput): Promise<Tag> {
     },
     body: JSON.stringify({ query, variables }),
   })
-
-  const result = await response.json()
-
-  if (result.errors) {
-    throw new Error(result.errors[0]?.message || 'Error al crear el tag')
+  // Leer respuesta y parsear de forma robusta para debugging
+  const text = await response.text()
+  try {
+    const json = JSON.parse(text)
+    console.log('%c[Tags.createTag] Response JSON:', 'background:#0b5; color:#000; padding:4px', json)
+    if (json.errors) {
+      throw new Error(json.errors[0]?.message || 'Error en createTag')
+    }
+    return json.data.createTag
+  } catch (e) {
+    // si no es JSON o vino con error, loguear el texto crudo y lanzar
+    console.warn('%c[Tags.createTag] Response text (non-JSON or error):', 'background:#ffb; color:#000; padding:4px', text)
+    throw new Error(text || 'Empty response from createTag')
   }
-
-  return result.data.createTag
 }
 
 // Listar todos los tags
@@ -144,6 +150,18 @@ export async function updateTag(id: number, input: UpdateTagInput): Promise<Tag>
   `
 
   const variables = { id, input }
+
+  // LOG: mostrar el payload que se envía al backend para facilitar debugging
+  try {
+    // evitar romper la función en entornos donde console no esté disponible
+    console.log('%c[Tags.updateTag] Enviando petición al backend', 'background:#222;color:#bada55;padding:4px', {
+      id,
+      input,
+      body: JSON.stringify({ query, variables }, null, 2),
+    })
+  } catch (e) {
+    // noop
+  }
 
   const response = await fetch(API_URL, {
     method: 'POST',
