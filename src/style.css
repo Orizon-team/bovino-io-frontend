@@ -25,6 +25,7 @@
 
     /* Destructive (errores) */
     --color-destructive: #EF4444; /* red-500 */
+    --color-destructive-foreground: #FFFFFF; /* white */
 
     /* Bordes */
     --color-border: #D1D5DB; /* gray-300 */
