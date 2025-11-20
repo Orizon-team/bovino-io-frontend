@@ -122,22 +122,33 @@ const handleSettings = () => {
 
     <div class="border-t border-border p-4">
       <DropdownMenu>
-        <DropdownMenuTrigger>
+        <DropdownMenuTrigger class="w-full">
           <Button 
             variant="ghost" 
             class="w-full justify-start gap-3 h-auto py-3 px-3"
           >
-            <Avatar class="h-9 w-9">
+            <Avatar class="h-9 w-9 shrink-0">
               <AvatarFallback class="bg-primary text-primary-foreground">
                 {{ userInitials }}
               </AvatarFallback>
             </Avatar>
-            <div class="flex flex-col items-start text-left">
-              <span class="text-sm font-semibold text-foreground">{{ userName }}</span>
-              <span class="text-xs text-muted-foreground">{{ userEmail }}</span>
+            <div class="flex flex-col items-start text-left overflow-hidden min-w-0 flex-1">
+              <span 
+                class="text-sm font-semibold text-foreground truncate w-full" 
+                :title="userName"
+              >
+                {{ userName }}
+              </span>
+              <span 
+                class="text-xs text-muted-foreground truncate w-full"
+                :title="userEmail"
+              >
+                {{ userEmail }}
+              </span>
             </div>
           </Button>
         </DropdownMenuTrigger>
+
 
         <DropdownMenuContent class="w-56" align="end" side="top">
           <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
