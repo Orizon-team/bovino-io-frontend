@@ -21,10 +21,11 @@ export type DevicesByZoneResponse = {
 }
 
 export type CreateDeviceInput = {
-  battery_level: number | null
+  battery_level: number
   id_zona: number
-  status: string | null
+  status: string
   tipo: string
+  mac_address: string
   ubicacion: string
   ultima_actualizacion: string | null
 }
@@ -38,9 +39,6 @@ export type CreateDeviceResponse = {
 
 export type UpdateDeviceInput = {
   ubicacion?: string
-  mac_address?: string
-  status?: string
-  battery_level?: number
 }
 
 export type UpdateDeviceResponse = {

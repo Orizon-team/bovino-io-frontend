@@ -1,7 +1,11 @@
 <script setup lang="ts">
+// ============================================================================
+// IMPORTS
+// ============================================================================
 import { ref, computed, onMounted } from 'vue'
 import { cn } from '@/lib/utils'
 
+// Componentes UI
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -33,6 +37,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+
+// Iconos
 import {
   MapPin,
   Radio,
@@ -42,15 +48,21 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  Settings,
   Pencil,
   Trash2,
   ChevronDown,
   ChevronRight,
 } from 'lucide-vue-next'
+
+// Servicios API
 import { getZonesByUser, createZone, updateZone, deleteZone } from '@/services/Zones'
 import { getDevicesByZone, createDevice, deleteDevice, updateDevice } from '@/services/Devices'
 
+// ============================================================================
+// TIPOS
+// ============================================================================
+
+/** Representa un dispositivo IoT con su información de estado y ubicación */
 type Device = {
   id: string
   type: string
@@ -60,6 +72,7 @@ type Device = {
   macAddress?: string | null
 }
 
+/** Representa una zona que agrupa múltiples dispositivos */
 type Zone = {
   id: string
   name: string
@@ -67,20 +80,41 @@ type Zone = {
   devicesLoading?: boolean
 }
 
+// ============================================================================
+// ESTADO - Datos principales
+// ============================================================================
+
 const zones = ref<Zone[]>([])
 const expandedZones = ref<Set<string>>(new Set())
-const addZoneDialogOpen = ref(false)
-const addDeviceDialogOpen = ref(false)
-const editZoneDialogOpen = ref(false)
-const editDeviceDialogOpen = ref(false)
-const deleteZoneDialogOpen = ref(false)
-const deleteDeviceDialogOpen = ref(false)
-const selectedZone = ref<Zone | null>(null)
-const selectedDevice = ref<{ zoneId: string; device: Device } | null>(null)
-
 const loading = ref(false)
 const error = ref<string | null>(null)
 
+// ============================================================================
+// ESTADO - Referencias de entidades seleccionadas
+// ============================================================================
+
+const selectedZone = ref<Zone | null>(null)
+const selectedDevice = ref<{ zoneId: string; device: Device } | null>(null)
+
+// ============================================================================
+// ESTADO - Control de diálogos
+// ============================================================================
+
+// Zonas
+const addZoneDialogOpen = ref(false)
+const editZoneDialogOpen = ref(false)
+const deleteZoneDialogOpen = ref(false)
+
+// Dispositivos
+const addDeviceDialogOpen = ref(false)
+const editDeviceDialogOpen = ref(false)
+const deleteDeviceDialogOpen = ref(false)
+
+// ============================================================================
+// ESTADO - Loading y errores por operación
+// ============================================================================
+
+// Zonas
 const addZoneLoading = ref(false)
 const addZoneError = ref<string | null>(null)
 const addZoneTouched = ref(false)
@@ -92,30 +126,45 @@ const editZoneTouched = ref(false)
 const deleteZoneLoading = ref(false)
 const deleteZoneError = ref<string | null>(null)
 
+// Dispositivos
 const addDeviceLoading = ref(false)
 const addDeviceError = ref<string | null>(null)
 
 const editDeviceLoading = ref(false)
 const editDeviceError = ref<string | null>(null)
 
-const editDeviceIdDialogOpen = ref(false)
-const editDeviceIdLoading = ref(false)
-const editDeviceIdError = ref<string | null>(null)
-
 const deleteDeviceLoading = ref(false)
 const deleteDeviceError = ref<string | null>(null)
 
+// ============================================================================
+// ESTADO - Formularios
+// ============================================================================
+
 const zoneFormData = ref<{ name: string }>({ name: '' })
-const deviceFormData = ref<{ ubicacion: string; tipo: string; zoneId: string; macAddress: string }>({
+
+const deviceFormData = ref<{ 
+  ubicacion: string
+  tipo: string
+  zoneId: string
+  macAddress: string // ✅ Campo para MAC address al crear dispositivo
+}>({
   ubicacion: '', 
   tipo: 'master', 
   zoneId: '',
-  macAddress: ''
+  macAddress: '' // ✅ Inicializado vacío
 })
+
+// ============================================================================
+// COMPUTED - Validaciones
+// ============================================================================
 
 const isZoneNameValid = computed(() => {
   return zoneFormData.value.name.trim().length >= 3
 })
+
+// ============================================================================
+// COMPUTED - Estadísticas generales
+// ============================================================================
 
 const totalZones = computed(() => zones.value.length)
 const totalDevices = computed(() => zones.value.reduce((acc, z) => acc + z.devices.length, 0))
@@ -124,11 +173,20 @@ const warningDevices = computed(() => zones.value.reduce((acc, z) => acc + z.dev
 const inactiveDevices = computed(() => zones.value.reduce((acc, z) => acc + z.devices.filter((d) => d.status === 'inactive').length, 0))
 const pendingDevices = computed(() => zones.value.reduce((acc, z) => acc + z.devices.filter((d) => d.status === 'pending').length, 0))
 
+// ============================================================================
+// FUNCIONES - Carga de datos
+// ============================================================================
+
+/**
+ * Carga todas las zonas del usuario desde la API
+ * También carga los dispositivos de cada zona en paralelo
+ */
 const loadZones = async () => {
   loading.value = true
   error.value = null
 
   try {
+    // Obtener usuario del localStorage
     const userString = localStorage.getItem('user')
     if (!userString) {
       throw new Error('No se encontró información del usuario')
@@ -141,8 +199,10 @@ const loadZones = async () => {
       throw new Error('ID de usuario no válido')
     }
 
+    // Cargar zonas desde la API
     const apiZones = await getZonesByUser(userId)
 
+    // Inicializar zonas sin dispositivos
     zones.value = apiZones.map((zone) => ({
       id: String(zone.id),
       name: zone.name,
@@ -150,23 +210,27 @@ const loadZones = async () => {
       devicesLoading: false,
     }))
 
+    // Cargar dispositivos de cada zona en paralelo
     await Promise.all(
       apiZones.map(async (zone) => {
         try {
           const apiDevices = await getDevicesByZone(zone.id)
           
+          // Mapear dispositivos de la API al formato local
           const devices: Device[] = apiDevices.map((device) => ({
             id: String(device.id),
             type: device.type,
             location: device.location,
             battery: device.battery_level || 0,
             macAddress: device.mac_address || null,
+            // Mapear estados de la API
             status: device.status === 'active' ? 'active' 
                    : device.status === 'inactive' ? 'inactive'
                    : device.status === 'pending' ? 'pending'
                    : 'warning',
           }))
 
+          // Actualizar zona con sus dispositivos
           zones.value = zones.value.map((z) =>
             z.id === String(zone.id) ? { ...z, devices } : z
           )
@@ -184,8 +248,14 @@ const loadZones = async () => {
   }
 }
 
+/**
+ * Carga los dispositivos de una zona específica (lazy loading)
+ * Solo se ejecuta si la zona no tiene dispositivos cargados
+ */
 const loadDevicesForZone = async (zoneId: string) => {
   const zone = zones.value.find((z) => z.id === zoneId)
+  
+  // No cargar si ya está cargando o ya tiene dispositivos
   if (!zone || zone.devicesLoading || zone.devices.length > 0) return
 
   zone.devicesLoading = true
@@ -216,10 +286,13 @@ const loadDevicesForZone = async (zoneId: string) => {
   }
 }
 
-onMounted(() => {
-  loadZones()
-})
+// ============================================================================
+// FUNCIONES - Navegación UI
+// ============================================================================
 
+/**
+ * Expande/contrae una zona y carga sus dispositivos si es necesario
+ */
 const toggleZone = async (zoneId: string) => {
   const newSet = new Set(expandedZones.value)
   const isExpanding = !newSet.has(zoneId)
@@ -227,13 +300,20 @@ const toggleZone = async (zoneId: string) => {
   if (isExpanding) {
     newSet.add(zoneId)
     expandedZones.value = newSet
-    await loadDevicesForZone(zoneId)
+    await loadDevicesForZone(zoneId) // Cargar dispositivos al expandir
   } else {
     newSet.delete(zoneId)
     expandedZones.value = newSet
   }
 }
 
+// ============================================================================
+// HANDLERS - ZONAS
+// ============================================================================
+
+/**
+ * Crea una nueva zona en la API
+ */
 const handleAddZone = async () => {
   addZoneTouched.value = true
 
@@ -262,6 +342,7 @@ const handleAddZone = async () => {
       id_user: userId,
     })
 
+    // Agregar nueva zona al estado local
     zones.value = [...zones.value, {
       id: String(newZone.id),
       name: newZone.name,
@@ -269,6 +350,7 @@ const handleAddZone = async () => {
       devicesLoading: false,
     }]
 
+    // Cerrar diálogo y resetear formulario
     addZoneDialogOpen.value = false
     zoneFormData.value = { name: '' }
     addZoneTouched.value = false
@@ -280,47 +362,9 @@ const handleAddZone = async () => {
   }
 }
 
-const handleAddDevice = async () => {
-  if (!deviceFormData.value.ubicacion || !deviceFormData.value.zoneId) {
-    return
-  }
-
-  addDeviceLoading.value = true
-  addDeviceError.value = null
-
-  try {
-    const newDevice = await createDevice({
-      battery_level: null,
-      id_zona: Number(deviceFormData.value.zoneId),
-      status: 'pending',
-      tipo: deviceFormData.value.tipo,
-      ubicacion: deviceFormData.value.ubicacion,
-      ultima_actualizacion: null,
-    })
-
-    const device: Device = {
-      id: String(newDevice.id),
-      type: newDevice.type,
-      location: newDevice.location,
-      battery: newDevice.battery_level || 0,
-      macAddress: newDevice.mac_address, 
-      status: 'pending',
-    }
-
-    zones.value = zones.value.map((z) =>
-      z.id === deviceFormData.value.zoneId ? { ...z, devices: [...z.devices, device] } : z,
-    )
-
-    addDeviceDialogOpen.value = false
-    deviceFormData.value = { ubicacion: '', tipo: 'master', zoneId: '', macAddress: '' }
-  } catch (err) {
-    console.error('Error al crear dispositivo:', err)
-    addDeviceError.value = err instanceof Error ? err.message : 'Error al crear el dispositivo'
-  } finally {
-    addDeviceLoading.value = false
-  }
-}
-
+/**
+ * Actualiza el nombre de una zona existente
+ */
 const handleEditZone = async () => {
   editZoneTouched.value = true
 
@@ -349,10 +393,12 @@ const handleEditZone = async () => {
       id_user: userId,
     })
 
+    // Actualizar zona en el estado local
     zones.value = zones.value.map((z) =>
       z.id === selectedZone.value?.id ? { ...z, name: updatedZone.name } : z
     )
 
+    // Cerrar diálogo y resetear
     editZoneDialogOpen.value = false
     selectedZone.value = null
     zoneFormData.value = { name: '' }
@@ -365,6 +411,88 @@ const handleEditZone = async () => {
   }
 }
 
+/**
+ * Elimina una zona y todos sus dispositivos asociados
+ */
+const handleDeleteZone = async () => {
+  if (!selectedZone.value) return
+
+  deleteZoneLoading.value = true
+  deleteZoneError.value = null
+
+  try {
+    await deleteZone(Number(selectedZone.value.id))
+
+    // Eliminar zona del estado local
+    zones.value = zones.value.filter((z) => z.id !== selectedZone.value!.id)
+
+    deleteZoneDialogOpen.value = false
+    selectedZone.value = null
+  } catch (err) {
+    console.error('Error al eliminar zona:', err)
+    deleteZoneError.value = err instanceof Error ? err.message : 'Error al eliminar la zona'
+  } finally {
+    deleteZoneLoading.value = false
+  }
+}
+
+// ============================================================================
+// HANDLERS - DISPOSITIVOS
+// ============================================================================
+
+/**
+ * ✅ Crea un nuevo dispositivo con MAC address opcional
+ * - Si tiene MAC: se crea con status 'active' y batería 100%
+ * - Si NO tiene MAC: se crea con status 'pending' y batería 0%
+ */
+const handleAddDevice = async () => {
+  if (!deviceFormData.value.ubicacion || !deviceFormData.value.zoneId || !deviceFormData.value.macAddress) {
+    return
+  }
+
+  addDeviceLoading.value = true
+  addDeviceError.value = null
+
+  try {
+    // ✅ Todos los dispositivos inician como 'pending' con batería 0%
+    const newDevice = await createDevice({
+      battery_level: 0, // ✅ Batería inicial en 0%
+      id_zona: Number(deviceFormData.value.zoneId),
+      status: 'pending', // ✅ Estado inicial pendiente hasta que se conecte
+      tipo: deviceFormData.value.tipo,
+      mac_address: deviceFormData.value.macAddress, // ✅ MAC obligatoria
+      ubicacion: deviceFormData.value.ubicacion,
+      ultima_actualizacion: null,
+    })
+
+    // Crear dispositivo local
+    const device: Device = {
+      id: String(newDevice.id),
+      type: newDevice.type,
+      location: newDevice.location,
+      battery: 0, // ✅ Batería inicial en 0%
+      macAddress: newDevice.mac_address,
+      status: 'pending', // ✅ Estado pendiente
+    }
+
+    // Agregar dispositivo a la zona correspondiente
+    zones.value = zones.value.map((z) =>
+      z.id === deviceFormData.value.zoneId ? { ...z, devices: [...z.devices, device] } : z,
+    )
+
+    addDeviceDialogOpen.value = false
+    deviceFormData.value = { ubicacion: '', tipo: 'master', zoneId: '', macAddress: '' }
+  } catch (err) {
+    console.error('Error al crear dispositivo:', err)
+    addDeviceError.value = err instanceof Error ? err.message : 'Error al crear el dispositivo'
+  } finally {
+    addDeviceLoading.value = false
+  }
+}
+
+/**
+ * Actualiza solo la ubicación de un dispositivo
+ */
 const handleEditDevice = async () => {
   if (!selectedDevice.value || !deviceFormData.value.ubicacion) {
     return
@@ -378,6 +506,7 @@ const handleEditDevice = async () => {
       ubicacion: deviceFormData.value.ubicacion,
     })
 
+    // Actualizar dispositivo en el estado local
     zones.value = zones.value.map((z) =>
       z.id === selectedDevice.value!.zoneId
         ? {
@@ -385,9 +514,7 @@ const handleEditDevice = async () => {
             devices: z.devices.map((d) =>
               d.id === selectedDevice.value!.device.id ? {
                 ...d,
-                type: updatedDevice.type,
                 location: updatedDevice.location,
-                macAddress: updatedDevice.mac_address,
               } : d,
             ),
           }
@@ -405,71 +532,9 @@ const handleEditDevice = async () => {
   }
 }
 
-const handleEditDeviceId = async () => {
-  if (!selectedDevice.value || !deviceFormData.value.macAddress) {
-    return
-  }
-
-  editDeviceIdLoading.value = true
-  editDeviceIdError.value = null
-
-  try {
-    const input = {
-      mac_address: deviceFormData.value.macAddress,
-      status: 'active',
-      battery_level: 100
-    }
-
-    const updatedDevice = await updateDevice(Number(selectedDevice.value.device.id), input)
-
-    zones.value = zones.value.map((z) =>
-      z.id === selectedDevice.value!.zoneId
-        ? {
-            ...z,
-            devices: z.devices.map((d) =>
-              d.id === selectedDevice.value!.device.id ? {
-                ...d,
-                macAddress: updatedDevice.mac_address,
-                status: 'active',
-                battery: 100,
-              } : d,
-            ),
-          }
-        : z,
-    )
-
-    editDeviceIdDialogOpen.value = false
-    selectedDevice.value = null
-    deviceFormData.value = { ubicacion: '', tipo: 'master', zoneId: '', macAddress: '' }
-  } catch (err) {
-    console.error('Error al editar ID del dispositivo:', err)
-    editDeviceIdError.value = err instanceof Error ? err.message : 'Error al editar el ID del dispositivo'
-  } finally {
-    editDeviceIdLoading.value = false
-  }
-}
-
-const handleDeleteZone = async () => {
-  if (!selectedZone.value) return
-
-  deleteZoneLoading.value = true
-  deleteZoneError.value = null
-
-  try {
-    await deleteZone(Number(selectedZone.value.id))
-
-    zones.value = zones.value.filter((z) => z.id !== selectedZone.value!.id)
-
-    deleteZoneDialogOpen.value = false
-    selectedZone.value = null
-  } catch (err) {
-    console.error('Error al eliminar zona:', err)
-    deleteZoneError.value = err instanceof Error ? err.message : 'Error al eliminar la zona'
-  } finally {
-    deleteZoneLoading.value = false
-  }
-}
-
+/**
+ * Elimina un dispositivo de la zona
+ */
 const handleDeleteDevice = async () => {
   if (!selectedDevice.value) return
 
@@ -479,6 +544,7 @@ const handleDeleteDevice = async () => {
   try {
     await deleteDevice(Number(selectedDevice.value.device.id))
 
+    // Eliminar dispositivo del estado local
     zones.value = zones.value.map((z) =>
       z.id === selectedDevice.value!.zoneId
         ? { ...z, devices: z.devices.filter((d) => d.id !== selectedDevice.value!.device.id) }
@@ -494,6 +560,10 @@ const handleDeleteDevice = async () => {
     deleteDeviceLoading.value = false
   }
 }
+
+// ============================================================================
+// FUNCIONES - Apertura de diálogos
+// ============================================================================
 
 const openEditZoneDialog = (zone: Zone) => {
   selectedZone.value = zone
@@ -511,21 +581,15 @@ const openDeleteZoneDialog = (zone: Zone) => {
 
 const openAddDeviceDialog = (zoneId: string) => {
   deviceFormData.value = { ubicacion: '', tipo: 'master', zoneId, macAddress: '' }
+  addDeviceError.value = null
   addDeviceDialogOpen.value = true
 }
 
 const openEditDeviceDialog = (zoneId: string, device: Device) => {
   selectedDevice.value = { zoneId, device }
-  deviceFormData.value = { ubicacion: device.location || '', tipo: device.type, zoneId, macAddress: device.macAddress || '' } 
+  deviceFormData.value = { ubicacion: device.location || '', tipo: device.type, zoneId, macAddress: '' }
   editDeviceError.value = null
   editDeviceDialogOpen.value = true
-}
-
-const openEditDeviceIdDialog = (zoneId: string, device: Device) => {
-  selectedDevice.value = { zoneId, device }
-  deviceFormData.value = { ubicacion: device.location || '', tipo: device.type, zoneId, macAddress: device.macAddress || '' }
-  editDeviceIdError.value = null
-  editDeviceIdDialogOpen.value = true
 }
 
 const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
@@ -533,10 +597,21 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
   deleteDeviceError.value = null
   deleteDeviceDialogOpen.value = true
 }
+
+// ============================================================================
+// LIFECYCLE
+// ============================================================================
+
+onMounted(() => {
+  loadZones()
+})
 </script>
 
 <template>
   <div class="p-6 space-y-6">
+    <!-- ========================================================================== -->
+    <!-- HEADER -->
+    <!-- ========================================================================== -->
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-3xl font-bold text-foreground">Zonas y Dispositivos</h1>
@@ -548,15 +623,25 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
       </Button>
     </div>
 
+    <!-- ========================================================================== -->
+    <!-- ERROR GLOBAL -->
+    <!-- ========================================================================== -->
     <div v-if="error" class="text-destructive text-sm p-3 rounded-md bg-destructive/10 border border-destructive/20">
       {{ error }}
     </div>
 
+    <!-- ========================================================================== -->
+    <!-- LOADING -->
+    <!-- ========================================================================== -->
     <div v-if="loading" class="text-center py-12">
       <p class="text-muted-foreground">Cargando zonas...</p>
     </div>
 
+    <!-- ========================================================================== -->
+    <!-- TARJETAS DE ESTADÍSTICAS -->
+    <!-- ========================================================================== -->
     <div v-if="!loading" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
+      <!-- Total Zonas -->
       <Card>
         <CardContent class="p-4">
           <div class="flex items-center justify-between">
@@ -571,6 +656,7 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
         </CardContent>
       </Card>
 
+      <!-- Total Dispositivos -->
       <Card>
         <CardContent class="p-4">
           <div class="flex items-center justify-between">
@@ -585,6 +671,7 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
         </CardContent>
       </Card>
 
+      <!-- Dispositivos Activos -->
       <Card>
         <CardContent class="p-4">
           <div class="flex items-center justify-between">
@@ -599,6 +686,7 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
         </CardContent>
       </Card>
 
+      <!-- Dispositivos con Advertencia -->
       <Card>
         <CardContent class="p-4">
           <div class="flex items-center justify-between"> 
@@ -613,6 +701,7 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
         </CardContent>
       </Card>
 
+      <!-- Dispositivos Inactivos -->
       <Card>
         <CardContent class="p-4">
           <div class="flex items-center justify-between">
@@ -627,11 +716,12 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
         </CardContent>
       </Card>
 
+      <!-- Dispositivos Pendientes (sin MAC asignada) -->
       <Card>
         <CardContent class="p-4">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-xs font-medium text-muted-foreground">Pendiente</p>
+              <p class="text-xs font-medium text-muted-foreground">Pendientes</p>
               <p class="text-2xl font-bold text-gray-600 mt-1">{{ pendingDevices }}</p>
             </div>
             <div class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-500/10">
@@ -642,6 +732,9 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
       </Card>
     </div>
 
+    <!-- ========================================================================== -->
+    <!-- ESTADO VACÍO - No hay zonas -->
+    <!-- ========================================================================== -->
     <div v-if="!loading && zones.length === 0" class="text-center py-12">
       <MapPin class="h-16 w-16 mx-auto text-muted-foreground mb-4" />
       <h3 class="text-lg font-semibold text-foreground mb-2">No tienes zonas creadas</h3>
@@ -652,12 +745,17 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
       </Button>
     </div>
 
+    <!-- ========================================================================== -->
+    <!-- LISTA DE ZONAS -->
+    <!-- ========================================================================== -->
     <div v-if="!loading && zones.length > 0" class="space-y-4">
       <template v-for="zone in zones" :key="zone.id">
         <Card class="overflow-hidden">
+          <!-- HEADER DE ZONA -->
           <CardHeader class="pb-3">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-3 flex-1">
+                <!-- Botón para expandir/contraer zona -->
                 <button
                   @click="toggleZone(zone.id)"
                   class="flex items-center gap-3 flex-1 text-left hover:opacity-80 transition-opacity"
@@ -675,7 +773,9 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
                 </button>
               </div>
 
+              <!-- Badges de estado y acciones -->
               <div class="flex items-center gap-2">
+                <!-- Badges de conteo por estado -->
                 <div class="flex items-center gap-1 mr-2">
                   <Badge
                     v-if="zone.devices.filter(d => d.status === 'active').length > 0"
@@ -706,10 +806,11 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
                     variant="outline"
                     class="bg-gray-500/10 text-gray-600 border-gray-500/20"
                   >
-                    {{ zone.devices.filter(d => d.status === 'pending').length }}{{ zone.devices.filter(d => d.status === 'pending').length !== 1 ? 's' : '' }}
+                    {{ zone.devices.filter(d => d.status === 'pending').length }} pendiente{{ zone.devices.filter(d => d.status === 'pending').length !== 1 ? 's' : '' }}
                   </Badge>
                 </div>
 
+                <!-- Botones de acción -->
                 <Button variant="outline" size="sm" class="gap-2 bg-transparent" @click="openAddDeviceDialog(zone.id)">
                   <Plus class="h-4 w-4" />
                   Dispositivo
@@ -724,19 +825,24 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
             </div>
           </CardHeader>
 
+          <!-- CONTENIDO DE ZONA (dispositivos) - Solo visible cuando está expandida -->
           <CardContent v-if="expandedZones.has(zone.id)" class="pt-0">
             <div class="space-y-3 pl-8">
+              <!-- Loading de dispositivos -->
               <div v-if="zone.devicesLoading" class="text-center py-8 text-muted-foreground text-sm">
                 Cargando dispositivos...
               </div>
 
+              <!-- Estado vacío de dispositivos -->
               <div v-else-if="zone.devices.length === 0" class="text-center py-8 text-muted-foreground text-sm">
                 No hay dispositivos en esta zona. Agrega uno para comenzar el monitoreo.
               </div>
 
+              <!-- Lista de dispositivos -->
               <template v-else v-for="device in zone.devices" :key="device.id">
                 <Card class="bg-muted/30">
                   <CardContent class="p-4">
+                    <!-- Header del dispositivo -->
                     <div class="flex items-start justify-between mb-3">
                       <div class="flex items-center gap-3">
                         <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
@@ -748,7 +854,9 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
                         </div>
                       </div>
 
+                      <!-- Badge de estado y botones de acción -->
                       <div class="flex items-center gap-1">
+                        <!-- Badge dinámico según estado -->
                         <Badge
                           variant="outline"
                           :class="cn(
@@ -767,32 +875,26 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
                           }}
                         </Badge>
                         
+                        <!-- Editar ubicación -->
                         <Button variant="ghost" size="icon" class="h-7 w-7" @click="openEditDeviceDialog(zone.id, device)">
                           <Pencil class="h-3 w-3" />
                         </Button>
 
-                        <Button 
-                            v-if="device.status === 'pending'" 
-                            variant="ghost" 
-                            size="icon" 
-                            class="h-8 w-8" 
-                            @click="openEditDeviceIdDialog(zone.id, device)"
-                          >
-                            <Settings class="h-4 w-4" />
-                        </Button>
-
+                        <!-- Eliminar dispositivo -->
                         <Button variant="ghost" size="icon" class="h-7 w-7 text-destructive hover:text-destructive" @click="openDeleteDeviceDialog(zone.id, device)">
                           <Trash2 class="h-3 w-3" />
                         </Button>
                       </div>
                     </div>
 
+                    <!-- ✅ Indicador de batería con colores según estado -->
                     <div class="space-y-1">
                       <div class="flex items-center justify-between text-xs">
                         <div class="flex items-center gap-1">
                           <Zap class="h-3 w-3 text-muted-foreground" />
                           <span class="text-muted-foreground">Batería</span>
                         </div>
+                        <!-- Color dinámico: Gris para pending, verde/amarillo/rojo según batería -->
                         <span :class="cn(
                           'font-semibold', 
                           device.status === 'pending' ? 'text-gray-600'
@@ -803,6 +905,7 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
                           {{ device.battery }}%
                         </span>
                       </div>
+                      <!-- Barra de progreso con color dinámico -->
                       <Progress
                         :modelValue="device.battery"
                         :class="cn(
@@ -822,6 +925,10 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
         </Card>
       </template>
     </div>
+
+    <!-- ========================================================================== -->
+    <!-- DIALOGS - ZONAS -->
+    <!-- ========================================================================== -->
 
     <!-- Dialog: Agregar Zona -->
     <Dialog v-model:open="addZoneDialogOpen">
@@ -865,68 +972,6 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
           >
             <span v-if="addZoneLoading">Agregando...</span>
             <span v-else>Agregar Zona</span>
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <!-- Dialog: Agregar Dispositivo -->
-    <Dialog v-model:open="addDeviceDialogOpen">
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Agregar Dispositivo</DialogTitle>
-          <DialogDescription>Registra un nuevo dispositivo IoT en esta zona</DialogDescription>
-        </DialogHeader>
-
-        <div class="space-y-4 py-4">
-          <div v-if="addDeviceError" class="text-destructive text-sm p-3 rounded-md bg-destructive/10 border border-destructive/20">
-            {{ addDeviceError }}
-          </div>
-
-          <div class="space-y-2">
-            <Label for="device-ubicacion">Localización</Label>
-            <Input
-              id="device-ubicacion"
-              v-model="deviceFormData.ubicacion"
-              placeholder="Ej: Pastizal 1"
-              :disabled="addDeviceLoading"
-            />
-            <p class="text-xs text-muted-foreground">
-              Ubicación física del dispositivo en la zona
-            </p>
-          </div>
-
-          <div class="space-y-2">
-            <Label for="device-tipo">Tipo de Dispositivo</Label>
-            <Select v-model="deviceFormData.tipo" :disabled="addDeviceLoading">
-              <SelectTrigger id="device-tipo">
-                <SelectValue placeholder="Selecciona el tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="master">master</SelectItem>
-                <SelectItem value="slave">slave</SelectItem>
-              </SelectContent>
-            </Select>
-            <p class="text-xs text-muted-foreground">
-              Los dispositivos maestros coordinan la red, los esclavos recopilan datos
-            </p>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            @click="addDeviceDialogOpen = false"
-            :disabled="addDeviceLoading"
-          >
-            Cancelar
-          </Button>
-          <Button
-            @click="handleAddDevice"
-            :disabled="addDeviceLoading || !deviceFormData.ubicacion"
-          >
-            <span v-if="addDeviceLoading">Agregando...</span>
-            <span v-else>Agregar Dispositivo</span>
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -979,12 +1024,92 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
       </DialogContent>
     </Dialog>
 
-    <!-- Dialog: Editar Dispositivo -->
+    <!-- ========================================================================== -->
+    <!-- DIALOGS - DISPOSITIVOS -->
+    <!-- ========================================================================== -->
+
+    <!-- ✅ Dialog: Agregar Dispositivo (ahora incluye campo MAC address opcional) -->
+    <Dialog v-model:open="addDeviceDialogOpen">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Agregar Dispositivo</DialogTitle>
+          <DialogDescription>Registra un nuevo dispositivo IoT en esta zona</DialogDescription>
+        </DialogHeader>
+
+        <div class="space-y-4 py-4">
+          <div v-if="addDeviceError" class="text-destructive text-sm p-3 rounded-md bg-destructive/10 border border-destructive/20">
+            {{ addDeviceError }}
+          </div>
+
+          <div class="space-y-2">
+            <Label for="device-ubicacion">Localización</Label>
+            <Input
+              id="device-ubicacion"
+              v-model="deviceFormData.ubicacion"
+              placeholder="Ej: Pastizal 1"
+              :disabled="addDeviceLoading"
+            />
+            <p class="text-xs text-muted-foreground">
+              Ubicación física del dispositivo en la zona
+            </p>
+          </div>
+
+          <div class="space-y-2">
+            <Label for="device-tipo">Tipo de Dispositivo</Label>
+            <Select v-model="deviceFormData.tipo" :disabled="addDeviceLoading">
+              <SelectTrigger id="device-tipo">
+                <SelectValue placeholder="Selecciona el tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="master">master</SelectItem>
+                <SelectItem value="slave">slave</SelectItem>
+              </SelectContent>
+            </Select>
+            <p class="text-xs text-muted-foreground">
+              Los dispositivos maestros coordinan la red, los esclavos recopilan datos
+            </p>
+          </div>
+
+          <!-- ✅ Campo opcional para MAC address -->
+          <div class="space-y-2">
+            <Label for="device-mac">ID del Dispositivo (MAC Address)</Label>
+            <Input
+              id="device-mac"
+              v-model="deviceFormData.macAddress"
+              placeholder="Ej: AA:BB:CC:DD:EE:FF"
+              :disabled="addDeviceLoading"
+            />
+            <p class="text-xs text-muted-foreground">
+              Identificador único del hardware físico. Lo encuentras en el display del dispositivo.
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button
+            variant="outline"
+            @click="addDeviceDialogOpen = false"
+            :disabled="addDeviceLoading"
+          >
+            Cancelar
+          </Button>
+          <Button
+            @click="handleAddDevice"
+            :disabled="addDeviceLoading || !deviceFormData.ubicacion"
+          >
+            <span v-if="addDeviceLoading">Agregando...</span>
+            <span v-else>Agregar Dispositivo</span>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Dialog: Editar Dispositivo (solo ubicación) -->
     <Dialog v-model:open="editDeviceDialogOpen">
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Editar Dispositivo</DialogTitle>
-          <DialogDescription>Modifica la ubicación y tipo del dispositivo IoT</DialogDescription>
+          <DialogDescription>Modifica la ubicación del dispositivo IoT</DialogDescription>
         </DialogHeader>
 
         <div class="space-y-4 py-4">
@@ -1025,51 +1150,9 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
       </DialogContent>
     </Dialog>
 
-    <!-- MAC_ADDRESS: Dialog actualizado para editar ID -->
-    <Dialog v-model:open="editDeviceIdDialogOpen">
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Editar ID del Dispositivo</DialogTitle>
-          <DialogDescription>Modifica el ID del dispositivo IoT</DialogDescription>
-        </DialogHeader>
-
-        <div class="space-y-4 py-4">
-          <div v-if="editDeviceIdError" class="text-destructive text-sm p-3 rounded-md bg-destructive/10 border border-destructive/20">
-            {{ editDeviceIdError }}
-          </div>
-
-          <div class="space-y-2">
-            <Label for="edit-device-mac">ID del Dispositivo</Label>
-            <Input
-              id="edit-device-mac"
-              v-model="deviceFormData.macAddress"
-              placeholder="Ej: AA:BB:CC:DD:EE:FF"
-              :disabled="editDeviceIdLoading"
-            />
-          </div>
-          <p class="text-xs text-muted-foreground">
-            Identificador único del dispositivo IoT
-          </p>
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            @click="editDeviceIdDialogOpen = false"
-            :disabled="editDeviceIdLoading"
-          >
-            Cancelar
-          </Button>
-          <Button
-            @click="handleEditDeviceId"
-            :disabled="editDeviceIdLoading || (!deviceFormData.ubicacion && !deviceFormData.macAddress)"
-          >
-            <span v-if="editDeviceIdLoading">Guardando...</span>
-            <span v-else>Guardar Cambios</span>
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <!-- ========================================================================== -->
+    <!-- ALERT DIALOGS - CONFIRMACIONES DE ELIMINACIÓN -->
+    <!-- ========================================================================== -->
 
     <!-- AlertDialog: Eliminar Zona -->
     <AlertDialog v-model:open="deleteZoneDialogOpen">
