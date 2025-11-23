@@ -91,11 +91,11 @@ const cattleToDelete = ref<Cattle | null>(null)
 const zones = computed(() => availableZones.value.map(z => z.name))
 
 // temp state for add / edit dialogs (avoid nullable types in v-models)
-const tempAdd = reactive({ tag: '', image: '', zone: '', notes: '', beacons: [] as string[] })
+const tempAdd = reactive({ tag: '', image: '', zone: '', notes: '', beacons: [] as string[], customId: '' })
 const editTemp = reactive({ id: 0, tag: '', image: '', zone: '', notes: '', beacons: [] as string[] })
 
 // validation state
-const addErrors = reactive({ tag: '', image: '', zone: '' })
+const addErrors = reactive({ tag: '', image: '', zone: '', customId: '' })
 const editErrors = reactive({ tag: '', image: '' })
 
 // Flag de mitigación: si true, NO llamamos a updateTag (evita cambios globales si el backend está roto)
@@ -312,7 +312,7 @@ const removeBeaconFromEdit = (idx: number) => {
 	editTemp.beacons.splice(idx, 1)
 }
 
-const handleAddCattle = async (newCattle: Partial<Cattle>) => {
+const handleAddCattle = async (newCattle: any) => {
 	try {
 		isLoading.value = true
 		error.value = null
@@ -334,6 +334,15 @@ const handleAddCattle = async (newCattle: Partial<Cattle>) => {
 		console.log('📡 MAC Address:', macAddress)
 		console.log('🗺️ Zona inicial:', newCattle.zone || 'Sin zona')
 		
+		// Obtener el customId si fue proporcionado
+		const cowCustomId = newCattle.customId && String(newCattle.customId).trim() !== '' 
+			? Number(newCattle.customId) 
+			: undefined
+		
+		if (cowCustomId !== undefined) {
+			console.log('🆔 ID personalizado del animal:', cowCustomId)
+		}
+		
 		const newTag = await createTag({
 			id_tag: uniqueTagId,
 			mac_address: macAddress,
@@ -345,7 +354,7 @@ const handleAddCattle = async (newCattle: Partial<Cattle>) => {
 		
 		console.log('✅ Tag creado exitosamente:', newTag)
 		
-		// 2. CREAR LA VACA con el tag_id único
+		// 2. CREAR LA VACA con el tag_id único y opcionalmente el ID personalizado
 		let createdCow: Cow
 		
 		// Si hay un archivo seleccionado, usar el endpoint REST con imagen
@@ -355,16 +364,24 @@ const handleAddCattle = async (newCattle: Partial<Cattle>) => {
 				newCattle.tag || `Ganado ${Date.now()}`,
 				userId.value,
 				newCattle.notes || 'Sin información adicional',
-				selectedFile.value
+				selectedFile.value,
+				cowCustomId // Pasar el ID personalizado si fue proporcionado
 			)
 		} else {
 			// Si no hay imagen, usar GraphQL createVaca
-			createdCow = await createVaca({
+			const createInput: any = {
 				nombre: newCattle.tag || `Ganado ${Date.now()}`,
 				comida_preferida: newCattle.notes || 'No especificada',
 				id_usuario: userId.value,
 				tag_id: newTag.id // Usar el ID del tag recién creado
-			})
+			}
+			
+			// Agregar el ID personalizado si fue proporcionado
+			if (cowCustomId !== undefined) {
+				createInput.id = cowCustomId
+			}
+			
+			createdCow = await createVaca(createInput)
 		}
 		
 		console.log('✅ Vaca creada exitosamente:', createdCow)
@@ -398,7 +415,6 @@ const handleEditCattle = (cattle: Cattle) => {
 	editTemp.beacons = cattle.beacons ? [...cattle.beacons] : []
 	editDialogOpen.value = true
 }
-
 const handleDeleteCattle = (cattle: Cattle) => {
 	cattleToDelete.value = cattle
 	deleteDialogOpen.value = true
@@ -632,22 +648,39 @@ const handleConfirmAdd = async () => {
 	addErrors.image = ''
 	addErrors.zone = ''
 
-	if (!tempAdd.tag || tempAdd.tag.trim() === '') addErrors.tag = 'El nombre es requerido'
-	if (!validateImageUrl(tempAdd.image)) addErrors.image = 'URL de imagen inválida'
+		if (!tempAdd.tag || tempAdd.tag.trim() === '') addErrors.tag = 'El nombre es requerido'
+		if (!validateImageUrl(tempAdd.image)) addErrors.image = 'URL de imagen inválida'
 
-	// stop if validation errors
-	if (addErrors.tag || addErrors.image || addErrors.zone) return
+		// Validar customId (si fue provisto)
+		addErrors.customId = ''
+		const providedCustomId = tempAdd.customId ? String(tempAdd.customId).trim() : ''
+		if (providedCustomId) {
+			// Validar que sea numérico
+			if (!/^\d+$/.test(providedCustomId)) {
+				addErrors.customId = 'El ID del animal debe ser numérico'
+			} else {
+				// Validar que no exista ya ese ID
+				const existingCattle = cattleList.value.find(c => c.id === Number(providedCustomId))
+				if (existingCattle) {
+					addErrors.customId = `El ID ${providedCustomId} ya está asignado al animal "${existingCattle.tag}"`
+				}
+			}
+		}
+		
+		// stop if validation errors
+	if (addErrors.tag || addErrors.image || addErrors.zone || addErrors.customId) return
 
 	try {
 		isLoading.value = true
 		// Reuse central handler that creates tag and cow (handles selectedFile and userId)
-		await handleAddCattle({
-			tag: tempAdd.tag,
-			image: tempAdd.image,
-			zone: tempAdd.zone,
-			notes: tempAdd.notes,
-			beacons: tempAdd.beacons,
-		})
+			await handleAddCattle({
+				tag: tempAdd.tag,
+				image: tempAdd.image,
+				zone: tempAdd.zone,
+				notes: tempAdd.notes,
+				beacons: tempAdd.beacons,
+				customId: tempAdd.customId,
+			})
 
 		// Reset temporary add form
 		tempAdd.tag = ''
@@ -655,6 +688,7 @@ const handleConfirmAdd = async () => {
 		tempAdd.zone = ''
 		tempAdd.notes = ''
 		tempAdd.beacons = []
+		tempAdd.customId = ''
 
 		// revoke object URL if any
 		if (currentAddObjectUrl) {
@@ -1014,19 +1048,18 @@ const handleConfirmDelete = async () => {
 					<div class="py-4 space-y-3">
 						<!-- Nombre / Tag -->
 						<div>
-							<label class="block text-sm font-medium">Nombre / Tag <span class="text-destructive">*</span></label>
+							<label class="block text-sm font-medium">Nombre<span class="text-destructive">*</span></label>
 							<Input class="bg-white!" v-model="tempAdd.tag" placeholder="Ej: El Pinto, La Manchada..." />
 							<div v-if="addErrors.tag" class="text-destructive text-sm mt-1">{{ addErrors.tag }}</div>
 						</div>
 
-						<!-- ID (auto) -->
-						<div>
-							<label class="block text-sm font-medium mt-1">ID del Animal</label>
-							<input class="w-full rounded-md border p-2 bg-muted text-sm" placeholder="Dejar vacío para generar automáticamente" disabled />
-							<div class="text-xs bg-white!">Si no se especifica, se generará un ID automáticamente</div>
-						</div>
-
-						<!-- Zona inicial (select) - OPCIONAL -->
+					<!-- ID del Animal (opcional, puede proporcionarlo el usuario) -->
+					<div>
+						<label class="block text-sm font-medium mt-1">ID del Animal (opcional)</label>
+						<input v-model="tempAdd.customId" class="w-full rounded-md border p-2 bg-white!" placeholder="Dejar vacío para generar automáticamente" />
+						<div v-if="addErrors.customId" class="text-destructive text-sm mt-1">{{ addErrors.customId }}</div>
+						<div v-else class="text-xs text-muted-foreground mt-1">Si lo proporcionas, se usará como ID de la vaca. Debe ser numérico.</div>
+					</div>						<!-- Zona inicial (select) - OPCIONAL -->
 						<div>
 							<label class="block text-sm font-medium mt-3">Zona Inicial (opcional)</label>
 							<Select v-model="tempAdd.zone">
@@ -1112,16 +1145,14 @@ const handleConfirmDelete = async () => {
 							<div class="py-4 space-y-3">
 								<template v-if="editTemp.id !== 0">
 									<!-- Nombre / Tag -->
-									<label class="block text-sm font-medium">Nombre / Tag <span class="text-destructive">*</span></label>
+									<label class="block text-sm font-medium">Nombre<span class="text-destructive">*</span></label>
 									<Input class="bg-white!" v-model="editTemp.tag" placeholder="Nombre / Apodo" />
 									<div v-if="editErrors.tag" class="text-destructive text-sm mt-1 ">{{ editErrors.tag }}</div>
 
-								<!-- ID (no editable) -->
-								<label class="block text-sm font-medium mt-3">ID del Animal</label>
-								<input class="w-full rounded-md border p-2 bg-white!" :value="editTemp.id" disabled />
-								<div class="text-xs text-muted-foreground mt-1">El ID no se puede modificar</div>
-
-								<!-- Zona Actual (select) -->
+							<!-- ID (no editable) -->
+							<label class="block text-sm font-medium mt-3">ID del Animal</label>
+							<input class="w-full rounded-md border p-2 bg-white!" :value="editTemp.id" disabled />
+							<div class="text-xs text-muted-foreground mt-1">El ID no se puede modificar</div>								<!-- Zona Actual (select) -->
 								<label class="block text-sm font-medium mt-3">Zona Actual</label>
 								<Select v-model="editTemp.zone">
 									<SelectTrigger class="w-full">
