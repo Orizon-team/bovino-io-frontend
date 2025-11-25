@@ -2,7 +2,7 @@
 // ============================================================================
 // IMPORTS
 // ============================================================================
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { cn } from '@/lib/utils'
 
 // Componentes UI
@@ -57,6 +57,8 @@ import {
 // Servicios API
 import { getZonesByUser, createZone, updateZone, deleteZone } from '@/services/Zones'
 import { getDevicesByZone, createDevice, deleteDevice, updateDevice } from '@/services/Devices'
+// Importar WebSocket client
+import { wsClient, type DeviceUpdateEvent } from '@/services/WebSockets'
 
 // ============================================================================
 // TIPOS
@@ -88,6 +90,9 @@ const zones = ref<Zone[]>([])
 const expandedZones = ref<Set<string>>(new Set())
 const loading = ref(false)
 const error = ref<string | null>(null)
+
+// Estado de conexión WebSocket
+const wsConnected = ref(false)
 
 // ============================================================================
 // ESTADO - Referencias de entidades seleccionadas
@@ -172,6 +177,75 @@ const activeDevices = computed(() => zones.value.reduce((acc, z) => acc + z.devi
 const warningDevices = computed(() => zones.value.reduce((acc, z) => acc + z.devices.filter((d) => d.status === 'warning').length, 0))
 const inactiveDevices = computed(() => zones.value.reduce((acc, z) => acc + z.devices.filter((d) => d.status === 'inactive').length, 0))
 const pendingDevices = computed(() => zones.value.reduce((acc, z) => acc + z.devices.filter((d) => d.status === 'pending').length, 0))
+
+// ============================================================================
+// FUNCIONES - WebSocket
+// ============================================================================
+
+/**
+ * ✅ Handler para actualizaciones de dispositivos desde WebSocket
+ * Actualiza el estado local cuando un dispositivo cambia (batería, status, etc.)
+ */
+const handleDeviceUpdate = (deviceData: DeviceUpdateEvent) => {
+  console.log('📡 Actualizando dispositivo desde WebSocket:', deviceData)
+
+  // Buscar y actualizar el dispositivo en las zonas
+  zones.value = zones.value.map((zone) => {
+    // Verificar si el dispositivo pertenece a esta zona
+    if (String(zone.id) === String(deviceData.zone.id)) {
+      return {
+        ...zone,
+        devices: zone.devices.map((device) => {
+          // Actualizar el dispositivo que coincide
+          if (String(device.id) === String(deviceData.id)) {
+            return {
+              ...device,
+              battery: deviceData.battery_level || 0,
+              status: deviceData.status === 'active' ? 'active'
+                     : deviceData.status === 'inactive' ? 'inactive'
+                     : deviceData.status === 'pending' ? 'pending'
+                     : 'warning',
+              location: deviceData.location,
+              macAddress: deviceData.mac_address || null,
+            }
+          }
+          return device
+        }),
+      }
+    }
+    return zone
+  })
+}
+
+/**
+ * ✅ Inicializa la conexión WebSocket
+ */
+const initWebSocket = () => {
+  wsClient.connect({
+    onConnect: (socketId) => {
+      console.log('✅ Conectado al servidor WebSocket:', socketId)
+      wsConnected.value = true
+    },
+    onDisconnect: () => {
+      console.log('❌ Desconectado del servidor WebSocket')
+      wsConnected.value = false
+    },
+    onDeviceUpdate: handleDeviceUpdate,
+    onError: (error) => {
+      console.error('❌ Error en WebSocket:', error)
+      wsConnected.value = false
+    },
+  })
+}
+
+/**
+ * ✅ Cierra la conexión WebSocket
+ */
+const closeWebSocket = () => {
+  wsClient.disconnect()
+  wsConnected.value = false
+}
+
 
 // ============================================================================
 // FUNCIONES - Carga de datos
@@ -604,6 +678,11 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
 
 onMounted(() => {
   loadZones()
+  initWebSocket() // ✅ Iniciar WebSocket al montar
+})
+
+onUnmounted(() => {
+  closeWebSocket() // ✅ Cerrar WebSocket al desmontar
 })
 </script>
 
