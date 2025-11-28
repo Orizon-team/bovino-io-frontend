@@ -5,7 +5,7 @@ import { Beef, Eye, EyeOff } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card'
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { login } from '@/services/Login'
 
 const router = useRouter()
@@ -159,20 +159,6 @@ const handleSubmit = async (e: Event) => {
                         </Button>
                     </form>
                 </CardContent>
-                <CardFooter class="flex flex-col gap-4">
-                    <div class="relative w-full">
-                        <div class="absolute inset-0 flex items-center">
-                            <span class="w-full border-t border-border" />
-                        </div>
-                        <div class="relative flex justify-center text-xs uppercase">
-                            <span class="bg-card px-2 text-muted-foreground">O</span>
-                        </div>
-                    </div>
-                    <p class="text-center text-sm text-muted-foreground">
-                        ¿No tienes una cuenta?
-                        <RouterLink to="/register" class="font-medium text-primary hover:underline"> Regístrate aquí</RouterLink>
-                    </p>
-                </CardFooter>
             </Card>
 
             <div class="mt-6 text-center">
