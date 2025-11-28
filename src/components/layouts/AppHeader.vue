@@ -30,9 +30,6 @@
         <RouterLink to="/login" custom v-slot="{ navigate }">
           <Button variant="ghost" @click="navigate">Iniciar Sesión</Button>
         </RouterLink>
-        <RouterLink to="/register" custom v-slot="{ navigate }">
-          <Button @click="navigate">Registrarse</Button>
-        </RouterLink>
       </div>
     </div>
   </header>

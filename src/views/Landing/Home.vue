@@ -18,7 +18,7 @@
             </p>
 
             <div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <RouterLink to="/register" custom v-slot="{ navigate }">
+            <RouterLink to="/login" custom v-slot="{ navigate }">
               <Button size="lg" @click="navigate">Comenzar Ahora</Button>
             </RouterLink>
 
