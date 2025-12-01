@@ -2,7 +2,7 @@
 // ============================================================================
 // IMPORTS
 // ============================================================================
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { cn } from '@/lib/utils'
 
 // Componentes UI
@@ -151,12 +151,12 @@ const deviceFormData = ref<{
   ubicacion: string
   tipo: string
   zoneId: string
-  macAddress: string // ✅ Campo para MAC address al crear dispositivo
+  macAddress: string // Campo para MAC address al crear dispositivo
 }>({
   ubicacion: '', 
   tipo: 'master', 
   zoneId: '',
-  macAddress: '' // ✅ Inicializado vacío
+  macAddress: '' // Inicializado vacío
 })
 
 // ============================================================================
@@ -183,7 +183,7 @@ const pendingDevices = computed(() => zones.value.reduce((acc, z) => acc + z.dev
 // ============================================================================
 
 /**
- * ✅ Handler para actualizaciones de dispositivos desde WebSocket
+ * Handler para actualizaciones de dispositivos desde WebSocket
  * Actualiza el estado local cuando un dispositivo cambia (batería, status, etc.)
  */
 const handleDeviceUpdate = (deviceData: DeviceUpdateEvent) => {
@@ -218,7 +218,7 @@ const handleDeviceUpdate = (deviceData: DeviceUpdateEvent) => {
 }
 
 /**
- * ✅ Inicializa la conexión WebSocket
+ * Inicializa la conexión WebSocket
  */
 const initWebSocket = () => {
   wsClient.connect({
@@ -239,7 +239,7 @@ const initWebSocket = () => {
 }
 
 /**
- * ✅ Cierra la conexión WebSocket
+ * Cierra la conexión WebSocket
  */
 const closeWebSocket = () => {
   wsClient.disconnect()
@@ -515,7 +515,7 @@ const handleDeleteZone = async () => {
 // ============================================================================
 
 /**
- * ✅ Crea un nuevo dispositivo con MAC address opcional
+ * Crea un nuevo dispositivo con MAC address opcional
  * - Si tiene MAC: se crea con status 'active' y batería 100%
  * - Si NO tiene MAC: se crea con status 'pending' y batería 0%
  */
@@ -528,13 +528,13 @@ const handleAddDevice = async () => {
   addDeviceError.value = null
 
   try {
-    // ✅ Todos los dispositivos inician como 'pending' con batería 0%
+    // Todos los dispositivos inician como 'pending' con batería 0%
     const newDevice = await createDevice({
-      battery_level: 0, // ✅ Batería inicial en 0%
+      battery_level: 0, // Batería inicial en 0%
       id_zona: Number(deviceFormData.value.zoneId),
-      status: 'pending', // ✅ Estado inicial pendiente hasta que se conecte
+      status: 'pending', // Estado inicial pendiente hasta que se conecte
       tipo: deviceFormData.value.tipo,
-      mac_address: deviceFormData.value.macAddress, // ✅ MAC obligatoria
+      mac_address: deviceFormData.value.macAddress, // MAC obligatoria
       ubicacion: deviceFormData.value.ubicacion,
       ultima_actualizacion: null,
     })
@@ -544,9 +544,9 @@ const handleAddDevice = async () => {
       id: String(newDevice.id),
       type: newDevice.type,
       location: newDevice.location,
-      battery: 0, // ✅ Batería inicial en 0%
+      battery: 0, // Batería inicial en 0%
       macAddress: newDevice.mac_address,
-      status: 'pending', // ✅ Estado pendiente
+      status: 'pending', // Estado pendiente
     }
 
     // Agregar dispositivo a la zona correspondiente
@@ -636,6 +636,48 @@ const handleDeleteDevice = async () => {
 }
 
 // ============================================================================
+// FUNCIONES - Utilidades
+// ============================================================================
+
+/**
+ * Formatea automáticamente una dirección MAC agregando ":" cada 2 caracteres
+ * Solo permite caracteres hexadecimales (A-F, 0-9) y limita a 17 caracteres (AA:BB:CC:DD:EE:FF)
+ */
+const formatMacAddress = (value: string): string => {
+  // Remover todos los ":" y convertir a mayúsculas
+  let clean = value.replace(/:/g, '').toUpperCase()
+  
+  // Filtrar solo caracteres hexadecimales válidos
+  clean = clean.replace(/[^A-F0-9]/g, '')
+  
+  // Limitar a 12 caracteres (6 bytes sin ":")
+  clean = clean.substring(0, 12)
+  
+  // Agregar ":" cada 2 caracteres, pero no al final
+  return clean.replace(/(.{2})(?=.)/g, '$1:')
+}
+
+// ============================================================================
+// ESTADO - Ref separado para MAC Address (mejor reactividad)
+// ============================================================================
+
+const macInputValue = ref('')
+
+// ============================================================================
+// WATCHERS - Formato automático
+// ============================================================================
+
+/**
+ * ✅ Watcher que formatea el MAC Address en tiempo real
+ * Se ejecuta cada vez que cambia el valor del input
+ */
+watch(macInputValue, (newValue) => {
+  const formatted = formatMacAddress(newValue)
+  deviceFormData.value.macAddress = formatted
+  macInputValue.value = formatted
+})
+
+// ============================================================================
 // FUNCIONES - Apertura de diálogos
 // ============================================================================
 
@@ -655,6 +697,7 @@ const openDeleteZoneDialog = (zone: Zone) => {
 
 const openAddDeviceDialog = (zoneId: string) => {
   deviceFormData.value = { ubicacion: '', tipo: 'master', zoneId, macAddress: '' }
+  macInputValue.value = ''
   addDeviceError.value = null
   addDeviceDialogOpen.value = true
 }
@@ -662,6 +705,7 @@ const openAddDeviceDialog = (zoneId: string) => {
 const openEditDeviceDialog = (zoneId: string, device: Device) => {
   selectedDevice.value = { zoneId, device }
   deviceFormData.value = { ubicacion: device.location || '', tipo: device.type, zoneId, macAddress: '' }
+  macInputValue.value = device.macAddress || ''
   editDeviceError.value = null
   editDeviceDialogOpen.value = true
 }
@@ -678,11 +722,11 @@ const openDeleteDeviceDialog = (zoneId: string, device: Device) => {
 
 onMounted(() => {
   loadZones()
-  initWebSocket() // ✅ Iniciar WebSocket al montar
+  initWebSocket() // Iniciar WebSocket al montar
 })
 
 onUnmounted(() => {
-  closeWebSocket() // ✅ Cerrar WebSocket al desmontar
+  closeWebSocket() // Cerrar WebSocket al desmontar
 })
 </script>
 
@@ -712,7 +756,8 @@ onUnmounted(() => {
     <!-- ========================================================================== -->
     <!-- LOADING -->
     <!-- ========================================================================== -->
-    <div v-if="loading" class="text-center py-12">
+    <div v-if="loading" class="flex flex-col items-center justify-center py-16 text-center">
+      <div class="animate-spin h-12 w-12 border-4 border-primary border-t-transparent rounded-full mb-4"></div>
       <p class="text-muted-foreground">Cargando zonas...</p>
     </div>
 
@@ -966,7 +1011,7 @@ onUnmounted(() => {
                       </div>
                     </div>
 
-                    <!-- ✅ Indicador de batería con colores según estado -->
+                    <!-- Indicador de batería con colores según estado -->
                     <div class="space-y-1">
                       <div class="flex items-center justify-between text-xs">
                         <div class="flex items-center gap-1">
@@ -1107,7 +1152,7 @@ onUnmounted(() => {
     <!-- DIALOGS - DISPOSITIVOS -->
     <!-- ========================================================================== -->
 
-    <!-- ✅ Dialog: Agregar Dispositivo (ahora incluye campo MAC address opcional) -->
+    <!-- Dialog: Agregar Dispositivo (ahora incluye campo MAC address opcional) -->
     <Dialog v-model:open="addDeviceDialogOpen">
       <DialogContent>
         <DialogHeader>
@@ -1149,14 +1194,15 @@ onUnmounted(() => {
             </p>
           </div>
 
-          <!-- ✅ Campo opcional para MAC address -->
+          <!-- Campo opcional para MAC address -->
           <div class="space-y-2">
             <Label for="device-mac">ID del Dispositivo (MAC Address)</Label>
             <Input
               id="device-mac"
-              v-model="deviceFormData.macAddress"
+              v-model="macInputValue"
               placeholder="Ej: AA:BB:CC:DD:EE:FF"
               :disabled="addDeviceLoading"
+              maxlength="17"
             />
             <p class="text-xs text-muted-foreground">
               Identificador único del hardware físico. Lo encuentras en el display del dispositivo.
