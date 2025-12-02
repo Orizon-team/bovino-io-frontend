@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, reactive } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUser } from '@/composables/useUser'
+import { wsClient } from '@/services/WebSockets'
 import { listVacas, getVacasByUser, getVacaById, createVaca, createCowWithImage, updateVaca, deleteVaca, type Cow } from '@/services/Cows'
 import { getZonesByUser, type Zone } from '@/services/Zones'
 import { updateTag, createTag } from '@/services/Tags'
 import {
-	Beef,
+	PiggyBank,
 	Search,
 	Plus,
 	Filter,
@@ -146,7 +147,7 @@ const mapCowToCattle = (cow: Cow): Cattle => {
 	return {
 		id: cow.id,
 		tag: cow.name,
-		image: cow.image || '/images/Vaca.jpeg',
+		image: cow.image || null,
 		zone: cow.tag?.current_location || null,
 		lastSeen: 'Hace unos momentos',
 		notes: cow.favorite_food ? `Comida favorita: ${cow.favorite_food}` : '',
@@ -223,6 +224,88 @@ onMounted(() => {
 	// Cargar zonas y datos desde la API
 	loadZones()
 	loadCattle()
+
+	// Inicializar WebSocket y suscribirse a eventos de registro de vacas
+	wsClient.connect({
+		onConnect: (socketId) => {
+			console.log('✅ WebSocket conectado (Mi_ganado):', socketId)
+			// Suscribir al usuario si existe
+			if (userId.value && userId.value > 0) {
+				wsClient.userSubscribe(userId.value)
+			} else {
+				console.warn('No hay userId disponible para user.subscribe')
+			}
+		},
+		onDisconnect: () => {
+			console.log('❌ WebSocket desconectado (Mi_ganado)')
+		},
+		onError: (err) => {
+			console.error('Error WebSocket (Mi_ganado):', err)
+		},
+		onCowRegistrationRequest: (payload) => {
+			console.log('📨 cow.registration.request (Mi_ganado):', payload)
+			// Prefill add dialog with info from payload
+			try {
+				if (payload) {
+					// Prefill 'ear_tag' (campo mostrado en UI como "ID del Animal (ear_tag)")
+					// El campo del formulario se llama tempAdd.customId, así que lo rellenamos con el valor del payload
+					// Preferir ear_tag (campo que usan en la BD) si está presente
+					if (payload.ear_tag) {
+						tempAdd.customId = String(payload.ear_tag)
+					} else if (payload.tag_id) {
+						tempAdd.customId = String(payload.tag_id)
+					} else if (payload.tag && payload.tag.id_tag) {
+						tempAdd.customId = String(payload.tag.id_tag)
+					}
+
+					// también mantener beacons si se usa en otros flujos
+					tempAdd.beacons = []
+					if (tempAdd.customId) tempAdd.beacons.push(tempAdd.customId)
+
+					// mac_address -> anotar en notas para referencia
+					if (payload.mac_address) tempAdd.notes = `MAC: ${payload.mac_address}`
+
+					// zona sugerida
+					if (payload.zone) tempAdd.zone = payload.zone
+
+					// abrir diálogo de agregar vaca
+					addDialogOpen.value = true
+
+					// si viene redirect_url, navegar a ella (por ejemplo para flujo móvil)
+					if (payload.redirect_url) {
+						try {
+							window.location.href = payload.redirect_url
+						} catch (navErr) {
+							console.warn('No se pudo navegar a redirect_url:', navErr)
+						}
+					}
+				}
+			} catch (err) {
+				console.error('Error al manejar cow.registration.request:', err)
+			}
+		},
+		onCowRegistrationTimeout: (payload) => {
+			console.log('⏱️ cow.registration.timeout (Mi_ganado):', payload)
+			// Cerrar diálogo y avisar al usuario
+			addDialogOpen.value = false
+			error.value = 'El registro del tag venció. Intenta nuevamente.'
+			setTimeout(() => { error.value = null }, 5000)
+		},
+		onCowRegistrationError: (payload) => {
+			console.log('❌ cow.registration.error (Mi_ganado):', payload)
+			addDialogOpen.value = false
+			error.value = payload?.message || 'Error durante el registro del tag'
+			setTimeout(() => { error.value = null }, 5000)
+		}
+	})
+})
+
+onUnmounted(() => {
+	// Desuscribir usuario y cerrar WebSocket al salir del componente
+	if (userId.value && userId.value > 0) {
+		try { wsClient.userUnsubscribe(userId.value) } catch (e) { console.warn('userUnsubscribe falló', e) }
+	}
+	wsClient.disconnect()
 })
 
 watch(
@@ -334,14 +417,14 @@ const handleAddCattle = async (newCattle: any) => {
 		console.log('📡 MAC Address:', macAddress)
 		console.log('🗺️ Zona inicial:', newCattle.zone || 'Sin zona')
 		
-		// Obtener el customId si fue proporcionado
-		const cowCustomId = newCattle.customId && String(newCattle.customId).trim() !== '' 
-			? Number(newCattle.customId) 
-			: undefined
-		
-		if (cowCustomId !== undefined) {
-			console.log('🆔 ID personalizado del animal:', cowCustomId)
-		}
+				// Obtener el ear_tag si fue proporcionado (no forzar a número)
+				const cowEarTag = newCattle.customId && String(newCattle.customId).trim() !== ''
+					? String(newCattle.customId).trim()
+					: undefined
+
+				if (cowEarTag !== undefined) {
+					console.log('🆔 ear_tag personalizado del animal:', cowEarTag)
+				}
 		
 		const newTag = await createTag({
 			id_tag: uniqueTagId,
@@ -365,7 +448,7 @@ const handleAddCattle = async (newCattle: any) => {
 				userId.value,
 				newCattle.notes || 'Sin información adicional',
 				selectedFile.value,
-				cowCustomId // Pasar el ID personalizado si fue proporcionado
+				cowEarTag // Pasar ear_tag personalizado si fue proporcionado
 			)
 		} else {
 			// Si no hay imagen, usar GraphQL createVaca
@@ -376,9 +459,9 @@ const handleAddCattle = async (newCattle: any) => {
 				tag_id: newTag.id // Usar el ID del tag recién creado
 			}
 			
-			// Agregar el ID personalizado si fue proporcionado
-			if (cowCustomId !== undefined) {
-				createInput.id = cowCustomId
+			// Agregar ear_tag si fue proporcionado
+			if (cowEarTag !== undefined) {
+				createInput.ear_tag = cowEarTag
 			}
 			
 			createdCow = await createVaca(createInput)
@@ -580,7 +663,7 @@ const saveEditFromTemp = async () => {
 					const updatedCattle = {
 						id,
 						tag: editTemp.tag,
-						image: editTemp.image || currentCattle?.image || '/images/Vaca.jpeg',
+						image: editTemp.image || currentCattle?.image || null,
 						zone: editTemp.zone === '' ? null : editTemp.zone,
 						lastSeen: currentCattle?.lastSeen || 'Hace unos momentos',
 						notes: editTemp.notes || currentCattle?.notes || '',
@@ -605,7 +688,7 @@ const saveEditFromTemp = async () => {
 				const updatedCattle = {
 					id,
 					tag: editTemp.tag,
-					image: editTemp.image || currentCattle?.image || '/images/Vaca.jpeg',
+					image: editTemp.image || currentCattle?.image || null,
 					zone: editTemp.zone === '' ? null : editTemp.zone,
 					lastSeen: currentCattle?.lastSeen || 'Hace unos momentos',
 					notes: editTemp.notes || currentCattle?.notes || '',
@@ -651,18 +734,18 @@ const handleConfirmAdd = async () => {
 		if (!tempAdd.tag || tempAdd.tag.trim() === '') addErrors.tag = 'El nombre es requerido'
 		if (!validateImageUrl(tempAdd.image)) addErrors.image = 'URL de imagen inválida'
 
-		// Validar customId (si fue provisto)
+		// Validar ear_tag (si fue provisto)
 		addErrors.customId = ''
 		const providedCustomId = tempAdd.customId ? String(tempAdd.customId).trim() : ''
 		if (providedCustomId) {
-			// Validar que sea numérico
-			if (!/^\d+$/.test(providedCustomId)) {
-				addErrors.customId = 'El ID del animal debe ser numérico'
+			// Permitir letras, números, guiones y guiones bajos
+			if (!/^[A-Za-z0-9-_]+$/.test(providedCustomId)) {
+				addErrors.customId = 'El ear_tag solo puede contener letras, números, guiones y guiones bajos'
 			} else {
-				// Validar que no exista ya ese ID
-				const existingCattle = cattleList.value.find(c => c.id === Number(providedCustomId))
+				// Validar que no exista ya ese ear_tag
+				const existingCattle = cattleList.value.find(c => c.ear_tag === providedCustomId)
 				if (existingCattle) {
-					addErrors.customId = `El ID ${providedCustomId} ya está asignado al animal "${existingCattle.tag}"`
+					addErrors.customId = `El ear_tag ${providedCustomId} ya está asignado al animal "${existingCattle.tag}"`
 				}
 			}
 		}
@@ -799,7 +882,7 @@ const handleConfirmDelete = async () => {
 
 		<!-- Cattle Display -->
 		<div v-else-if="filteredCattle.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
-			<Beef class="h-16 w-16 text-muted-foreground mb-4" />
+			<PiggyBank class="h-16 w-16 text-muted-foreground mb-4" />
 			<h3 class="text-xl font-semibold text-foreground mb-2">No se encontraron animales</h3>
 			<p class="text-sm text-muted-foreground mb-6">Intenta ajustar los filtros de búsqueda</p>
 			<Button variant="outline" @click="() => { searchQuery = ''; zoneFilter = 'all' }">Limpiar filtros</Button>
@@ -816,7 +899,14 @@ const handleConfirmDelete = async () => {
 					<div class="flex flex-col items-start gap-0">
 						<!-- image area with optional overlay when offline -->
 					<div class="relative w-full">
-						<img :src="cattle.image || '/images/Vaca.jpeg'" :alt="cattle.tag" class="h-44 w-full object-cover" />
+						<template v-if="cattle.image">
+							<img :src="cattle.image" :alt="cattle.tag" class="h-44 w-full object-cover" />
+						</template>
+						<template v-else>
+							<div class="h-44 w-full flex items-center justify-center bg-gray-100">
+								<PiggyBank class="h-20 w-20 text-muted-foreground" />
+							</div>
+						</template>
 						
 						<!-- Botones de editar y eliminar sobre la imagen -->
 						<div class="absolute top-2 right-2 flex gap-2">
@@ -862,7 +952,14 @@ const handleConfirmDelete = async () => {
 		<div v-else class="space-y-3">
 			<Card v-for="cattle in filteredCattle" :key="cattle.id" class="p-4 hover:shadow-md transition-shadow cursor-pointer" @click="handleCattleClick(cattle)">
 				<div class="flex items-center gap-4">
-					  <img :src="cattle.image || '/images/Vaca.jpeg'" :alt="cattle.tag" class="h-16 w-16 rounded-lg object-cover shrink-0" />
+					  <template v-if="cattle.image">
+						<img :src="cattle.image" :alt="cattle.tag" class="h-16 w-16 rounded-lg object-cover shrink-0" />
+					  </template>
+					  <template v-else>
+						<div class="h-16 w-16 rounded-lg flex items-center justify-center bg-gray-100 shrink-0">
+							<PiggyBank class="h-8 w-8 text-muted-foreground" />
+						</div>
+					  </template>
 
 					<div class="flex-1 min-w-0">
 						<div class="flex items-center gap-2 mb-1">
@@ -912,7 +1009,14 @@ const handleConfirmDelete = async () => {
 						<!-- Header row: image left + title/info right -->
 						<div class="grid grid-cols-1 gap-6 md:grid-cols-3 items-start">
 							<div class="md:col-span-1 flex items-start gap-4">
-								<img :src="selectedCattle?.image || '/images/Vaca.jpeg'" :alt="selectedCattle?.tag" class="w-44 h-36 rounded-lg object-cover" />
+								<template v-if="selectedCattle?.image">
+									<img :src="selectedCattle?.image" :alt="selectedCattle?.tag" class="w-44 h-36 rounded-lg object-cover" />
+								</template>
+								<template v-else>
+									<div class="w-44 h-36 rounded-lg flex items-center justify-center bg-gray-100">
+										<PiggyBank class="h-12 w-12 text-muted-foreground" />
+									</div>
+								</template>
 								<div class="hidden md:block">
 									<!-- spacer to align with right column on md+ screens -->
 								</div>
@@ -1055,13 +1159,13 @@ const handleConfirmDelete = async () => {
 
 					<!-- ID del Animal (opcional, puede proporcionarlo el usuario) -->
 					<div>
-						<label class="block text-sm font-medium mt-1">ID del Animal (opcional)</label>
+						<label class="block text-sm font-medium mt-1">ID del Animal (ear_tag)</label>
 						<input v-model="tempAdd.customId" class="w-full rounded-md border p-2 bg-white!" placeholder="Dejar vacío para generar automáticamente" />
 						<div v-if="addErrors.customId" class="text-destructive text-sm mt-1">{{ addErrors.customId }}</div>
 						<div v-else class="text-xs text-muted-foreground mt-1">Si lo proporcionas, se usará como ID de la vaca. Debe ser numérico.</div>
 					</div>						<!-- Zona inicial (select) - OPCIONAL -->
 						<div>
-							<label class="block text-sm font-medium mt-3">Zona Inicial (opcional)</label>
+						<!--	<label class="block text-sm font-medium mt-3">Zona Inicial (opcional)</label>
 							<Select v-model="tempAdd.zone">
 								<SelectTrigger class="w-full">
 									<SelectValue placeholder="Selecciona una zona (opcional)" />
@@ -1074,7 +1178,7 @@ const handleConfirmDelete = async () => {
 								</SelectContent>
 							</Select>
 							<div v-if="addErrors.zone" class="text-destructive text-sm mt-1">{{ addErrors.zone }}</div>
-							<div class="text-xs text-muted-foreground mt-1">Puedes asignar una zona más tarde</div>
+							<div class="text-xs text-muted-foreground mt-1">Puedes asignar una zona más tarde</div> -->
 						</div>
 
 						<!-- Imagen: gallery / camera boxes -->
@@ -1082,10 +1186,10 @@ const handleConfirmDelete = async () => {
 							<label class="block text-sm font-medium mt-3">Imagen del Animal</label>
 						<div class="mt-2 grid grid-cols-2 gap-3">
 							<!-- gallery -->
-							<div @click.prevent="triggerAddGallery" class="flex flex-col items-center justify-center border-dashed border-2 border-gray-200 rounded-lg p-6 cursor-pointer hover:bg-white">
+							<!--<div @click.prevent="triggerAddGallery" class="flex flex-col items-center justify-center border-dashed border-2 border-gray-200 rounded-lg p-6 cursor-pointer hover:bg-white">
 								<div class="text-sm font-medium">Subir desde galería</div>
 								<div class="text-xs text-muted-foreground mt-2">Selecciona una imagen desde tu dispositivo</div>
-							</div>
+							</div>-->
 							<!-- camera -->
 							<div @click.prevent="triggerAddCamera" class="flex flex-col items-center justify-center border-dashed border-2 border-gray-200 rounded-lg p-6 cursor-pointer hover:bg-white">
 								<div class="text-sm font-medium">Tomar foto</div>
@@ -1102,12 +1206,12 @@ const handleConfirmDelete = async () => {
 							<div v-if="addErrors.image" class="text-destructive text-sm mt-1">{{ addErrors.image }}</div>
 						</div>
 
-						<!-- beacons and notes -->
+						<!-- beacons and notes 
 						<label class="block text-sm font-medium mt-3">Beacons</label>
 						<div class="flex gap-2 mt-2">
 						<input v-model="addBeaconInput" placeholder="Agregar beacon (ID)" class="flex-1 rounded-md border p-2" />
 						<button @click.prevent="addBeaconToTemp" class="px-3 py-2 bg-primary text-white rounded-md">Agregar</button>
-					</div>
+					</div>-->
 					<div class="flex gap-2 flex-wrap mt-2">
 						<span v-for="(b, idx) in tempAdd.beacons" :key="b" class="inline-flex items-center gap-2 bg-white border border-gray-200 px-3 py-1 rounded-md text-sm">
 							{{ b }}
@@ -1170,7 +1274,14 @@ const handleConfirmDelete = async () => {
 								<!-- Imagen preview con boton eliminar -->
 									<label class="block text-sm font-medium mt-3">Imagen del Animal</label>
 									<div class="relative mt-2">
-										<img :src="editTemp.image || '/images/Vaca.jpeg'" alt="preview" class="w-full h-40 object-cover rounded-lg" />
+										<template v-if="editTemp.image">
+											<img :src="editTemp.image" alt="preview" class="w-full h-40 object-cover rounded-lg" />
+										</template>
+										<template v-else>
+											<div class="w-full h-40 rounded-lg flex items-center justify-center bg-gray-100">
+												<PiggyBank class="h-12 w-12 text-muted-foreground" />
+											</div>
+										</template>
 										<button @click.prevent="editTemp.image = ''" class="absolute right-3 top-3 h-8 w-8 rounded-full bg-destructive text-white flex items-center justify-center">×</button>
 									</div>
 

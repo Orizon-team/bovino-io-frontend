@@ -5,6 +5,13 @@ import { VitePWA } from 'vite-plugin-pwa'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
+  server: {
+    host: true,
+    allowedHosts: [
+      'voobcp-ip-209-178-128-69.tunnelmole.net',
+      '.tunnelmole.net'
+    ]
+  },
   plugins: [
     vue(),
     tailwindcss(),

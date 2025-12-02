@@ -26,6 +26,10 @@ export type WebSocketCallbacks = {
   onConnect?: (socketId: string) => void
   onDisconnect?: () => void
   onError?: (error: Error) => void
+  // Eventos relacionados al registro de vacas
+  onCowRegistrationRequest?: (payload: any) => void
+  onCowRegistrationTimeout?: (payload?: any) => void
+  onCowRegistrationError?: (payload?: any) => void
 }
 
 /**
@@ -88,6 +92,22 @@ class WebSocketClient {
         this.callbacks.onDeviceUpdate(device)
       }
     })
+
+    // Eventos para flujo de registro de vacas
+    this.socket.on('cow.registration.request', (payload: any) => {
+      console.log('🛰️ cow.registration.request recibido:', payload)
+      if (this.callbacks.onCowRegistrationRequest) this.callbacks.onCowRegistrationRequest(payload)
+    })
+
+    this.socket.on('cow.registration.timeout', (payload: any) => {
+      console.log('⏱️ cow.registration.timeout recibido:', payload)
+      if (this.callbacks.onCowRegistrationTimeout) this.callbacks.onCowRegistrationTimeout(payload)
+    })
+
+    this.socket.on('cow.registration.error', (payload: any) => {
+      console.log('❌ cow.registration.error recibido:', payload)
+      if (this.callbacks.onCowRegistrationError) this.callbacks.onCowRegistrationError(payload)
+    })
   }
 
   /**
@@ -101,6 +121,26 @@ class WebSocketClient {
       this.socket = null
       this.callbacks = {}
     }
+  }
+
+  /**
+   * Emitir un evento personalizado al servidor Socket.IO
+   */
+  emit(event: string, payload?: any) {
+    if (!this.socket) {
+      console.warn('WebSocket no está inicializado. No se puede emitir:', event)
+      return
+    }
+    this.socket.emit(event, payload)
+  }
+
+  /** Conveniencias para suscribirse/desuscribirse por usuario */
+  userSubscribe(userId: number) {
+    this.emit('user.subscribe', { id_user: userId })
+  }
+
+  userUnsubscribe(userId: number) {
+    this.emit('user.unsubscribe', { id_user: userId })
   }
 
   /**

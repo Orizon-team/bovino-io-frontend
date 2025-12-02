@@ -25,6 +25,7 @@ export type CreateVacaInput = {
   comida_preferida: string
   id_usuario: number
   tag_id: number
+  ear_tag?: number
 }
 
 export type UpdateVacaInput = {
@@ -95,7 +96,7 @@ export async function createCowWithImage(
   id_user: number,
   favorite_food: string,
   imagen: File,
-  customId?: number
+  earTag?: string
 ): Promise<Cow> {
   const formData = new FormData()
   formData.append('tag_id', tag_id.toString())
@@ -107,9 +108,9 @@ export async function createCowWithImage(
   console.log('%c📤 CREATECOWWITHIMAGE - Enviando al backend:', 'background: #9C27B0; color: white; font-weight: bold; padding: 4px;')
   console.log('Datos básicos:', { tag_id, name, id_user, favorite_food })
   
-  if (customId !== undefined) {
-    formData.append('id', customId.toString())
-    console.log('🆔 ID PERSONALIZADO incluido en FormData:', customId)
+  if (earTag !== undefined && earTag !== null && String(earTag).trim() !== '') {
+    formData.append('ear_tag', String(earTag))
+    console.log('🆔 ear_tag incluido en FormData:', earTag)
   } else {
     console.log('⚠️ Sin ID personalizado - el backend asignará uno automático')
   }
