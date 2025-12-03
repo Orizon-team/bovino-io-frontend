@@ -1,36 +1,45 @@
 <script setup lang="ts">
     import { RouterLink } from "vue-router";
-    import { Beef } from "lucide-vue-next";
     import { Button } from '@/components/ui/button'
+
+const scrollToSection = (sectionId: string) => {
+  const element = document.getElementById(sectionId)
+  if (element) {
+    element.scrollIntoView({ behavior: 'smooth' })
+  }
+}
 </script>
 
 <template>
-    <header class="sticky top-0 z-50 w-full border-b border-border/40 bg-transparent backdrop-blur">    
-      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex h-16 items-center justify-between">
-      <RouterLink to="/" class="flex items-center gap-2">
-        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-          <Beef class="h-6 w-6 text-primary-foreground" />
+  <header class="sticky top-0 z-50 w-full border-b border-border/40 bg-transparent backdrop-blur">    
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 grid grid-cols-3 items-center">
+        <RouterLink to="/" class="flex items-center gap-2 justify-start">
+          <div class="flex h-14 items-center justify-center">
+            <img
+              src="/public/logo.svg"
+              alt="Logotipo de Bovino-io"
+              class="h-full w-auto object-contain"
+            />
+          </div>
+        </RouterLink>
+
+        <nav class="hidden md:flex items-center gap-6 justify-center">
+          <button @click="scrollToSection('features')" class="text-sm font-medium text-foreground transition-colors hover:text-primary cursor-pointer">
+            Características
+          </button>
+          <button @click="scrollToSection('how-it-works')" class="text-sm font-medium text-foreground transition-colors hover:text-primary cursor-pointer">
+            Cómo funciona
+          </button>
+          <button @click="scrollToSection('footer')" class="text-sm font-medium text-foreground transition-colors hover:text-primary cursor-pointer">
+            Contacto
+          </button>
+        </nav>
+
+        <div class="flex items-center gap-3 justify-end">
+          <RouterLink to="/login" custom v-slot="{ navigate }">
+            <Button variant="ghost" @click="navigate">Iniciar Sesión</Button>
+          </RouterLink>
         </div>
-        <span class="text-xl font-bold text-foreground">Bovino-io</span>
-      </RouterLink>
-
-      <nav class="hidden md:flex items-center gap-6">
-        <RouterLink to="#" class="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-          Características
-        </RouterLink>
-        <RouterLink to="#" class="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-          Cómo funciona
-        </RouterLink>
-        <RouterLink to="#" class="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-          Contacto
-        </RouterLink>
-      </nav>
-
-      <div class="flex items-center gap-3">
-        <RouterLink to="/login" custom v-slot="{ navigate }">
-          <Button variant="ghost" @click="navigate">Iniciar Sesión</Button>
-        </RouterLink>
       </div>
-    </div>
   </header>
 </template>

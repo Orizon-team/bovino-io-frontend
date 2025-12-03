@@ -82,12 +82,16 @@ const handleSubmit = async (e: Event) => {
         <div class="relative z-10 w-full max-w-md">
             <div class="mb-8 flex flex-col items-center gap-2">
                 <RouterLink to="/" class="flex items-center gap-2">
-                    <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
-                        <Beef class="h-7 w-7 text-primary-foreground" />
+                    <div class="flex h-12 items-center justify-center">
+                    <img
+                        src="/images/logo.png"
+                        alt="Logo"
+                        class="h-full w-auto rounded-lg object-contain"
+                    />
                     </div>
-                    <span class="text-2xl font-bold text-white">Bovino-io</span>
+                    <span className="text-2xl font-bold text-white">Bovino-io</span>
                 </RouterLink>
-                <p class="text-sm text-white/80">Monitoreo Inteligente de Ganado</p>
+                <p class="text-sm text-white/80">Monitoreo Inteligente de Animales</p>
             </div>
 
             <Card class="border-border backdrop-blur-sm">

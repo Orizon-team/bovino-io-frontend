@@ -77,13 +77,15 @@ const handleSettings = () => {
 <template>
   <div class="flex h-full w-64 flex-col border-r border-border bg-card">
     <div class="flex h-16 items-center gap-2 border-b border-border px-6">
-      <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-        <Beef class="h-6 w-6 text-primary-foreground" />
-      </div>
-      <div class="flex flex-col">
-        <span class="text-lg font-bold text-foreground">Bovino-io</span>
-        <span class="text-xs text-muted-foreground">Monitoreo BLE</span>
-      </div>
+        <RouterLink to="/dashboard" class="flex items-center gap-2 justify-start">
+          <div class="flex h-12 items-center justify-center">
+            <img
+              src="/public/logo.svg"
+              alt="Logotipo de Bovino-io"
+              class="h-full w-auto object-contain"
+            />
+          </div>
+        </RouterLink>
     </div>
 
     <nav class="flex-1 space-y-1 p-4">
