@@ -1,6 +1,8 @@
 import { io, Socket } from 'socket.io-client'
 
-const SOCKET_URL = 'https://bovino-io-backend.onrender.com'
+// Allow overriding the WebSocket URL via Vite env var `VITE_WS_URL` for local testing.
+// Falls back to the production backend URL when not provided.
+const SOCKET_URL = (import.meta.env?.VITE_WS_URL as string) || 'https://bovino-io-backend.onrender.com'
 
 /**
  * Tipo de evento de actualización de dispositivo ESP32
@@ -30,6 +32,9 @@ export type WebSocketCallbacks = {
   onCowRegistrationRequest?: (payload: any) => void
   onCowRegistrationTimeout?: (payload?: any) => void
   onCowRegistrationError?: (payload?: any) => void
+  // Eventos para suscripción individual de vacas
+  onCowStatus?: (cow: any) => void
+  onCowError?: (err: any) => void
 }
 
 /**
@@ -108,6 +113,17 @@ class WebSocketClient {
       console.log('❌ cow.registration.error recibido:', payload)
       if (this.callbacks.onCowRegistrationError) this.callbacks.onCowRegistrationError(payload)
     })
+
+    // Eventos para suscripción individual de vacas
+    this.socket.on('cow.status', (cow: any) => {
+      console.log('🐄 cow.status recibido:', cow)
+      if (this.callbacks.onCowStatus) this.callbacks.onCowStatus(cow)
+    })
+
+    this.socket.on('cow.error', (err: any) => {
+      console.log('⚠️ cow.error recibido:', err)
+      if (this.callbacks.onCowError) this.callbacks.onCowError(err)
+    })
   }
 
   /**
@@ -141,6 +157,27 @@ class WebSocketClient {
 
   userUnsubscribe(userId: number) {
     this.emit('user.unsubscribe', { id_user: userId })
+  }
+
+  /** Suscribirse a actualizaciones de una vaca específica */
+  subscribeCow(id: number) {
+    if (!id) return
+    console.log('🛰️ Emitting cow.subscribe for id', id)
+    this.emit('cow.subscribe', { id })
+  }
+
+  /** Dejar de recibir actualizaciones de una vaca específica */
+  unsubscribeCow(id: number) {
+    if (!id) return
+    console.log('🛰️ Emitting cow.unsubscribe for id', id)
+    this.emit('cow.unsubscribe', { id })
+  }
+
+  /** Solicitar snapshot puntual de una vaca */
+  getCow(id: number) {
+    if (!id) return
+    console.log('🛰️ Emitting cow.get for id', id)
+    this.emit('cow.get', { id })
   }
 
   /**

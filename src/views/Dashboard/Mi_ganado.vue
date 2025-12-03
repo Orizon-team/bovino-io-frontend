@@ -297,6 +297,26 @@ onMounted(() => {
 			error.value = payload?.message || 'Error durante el registro del tag'
 			setTimeout(() => { error.value = null }, 5000)
 		}
+		,onCowStatus: (cow) => {
+			// Actualizaciones en tiempo real para una vaca suscrita
+			console.log('🔄 onCowStatus (Mi_ganado):', cow)
+			try {
+				if (selectedCattle.value && String(selectedCattle.value.id) === String(cow.id)) {
+					// actualizar campos visibles del modal
+					selectedCattle.value = { ...selectedCattle.value, ...cow }
+				}
+			} catch (e) {
+				console.warn('Error aplicando cow.status update:', e)
+			}
+		},
+		onCowError: (err) => {
+			console.warn('onCowError (Mi_ganado):', err)
+			// mostrar error breve si aplica
+			if (err && err.message) {
+				error.value = err.message
+				setTimeout(() => { error.value = null }, 5000)
+			}
+		}
 	})
 })
 
@@ -306,6 +326,21 @@ onUnmounted(() => {
 		try { wsClient.userUnsubscribe(userId.value) } catch (e) { console.warn('userUnsubscribe falló', e) }
 	}
 	wsClient.disconnect()
+})
+
+// Suscribir/desuscribir a la vaca cuando se abre/cierra el modal de detalle
+watch([detailModalOpen, selectedCattle], ([open, cattle]) => {
+	try {
+		if (open && cattle && cattle.id) {
+			wsClient.subscribeCow(Number(cattle.id))
+			// también solicitar snapshot puntual para sincronizar
+			wsClient.getCow(Number(cattle.id))
+		} else if (!open && cattle && cattle.id) {
+			wsClient.unsubscribeCow(Number(cattle.id))
+		}
+	} catch (e) {
+		console.warn('Error gestionando suscripción a cow:', e)
+	}
 })
 
 watch(
