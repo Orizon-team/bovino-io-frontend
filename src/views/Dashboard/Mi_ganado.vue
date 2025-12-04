@@ -7,7 +7,6 @@ import { listVacas, getVacasByUser, getVacaById, createVaca, createCowWithImage,
 import { getZonesByUser, type Zone } from '@/services/Zones'
 import { updateTag, createTag } from '@/services/Tags'
 import {
-	PiggyBank,
 	Search,
 	Plus,
 	Filter,
@@ -937,7 +936,7 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 
 		<!-- Cattle Display -->
 		<div v-else-if="filteredCattle.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
-			<PiggyBank class="h-16 w-16 text-muted-foreground mb-4" />
+			<img src="/images/Vaca.png" alt="Vaca" class="h-40 w-40 mb-4 select-none" />
 			<h3 class="text-xl font-semibold text-foreground mb-2">No se encontraron animales</h3>
 			<p class="text-sm text-muted-foreground mb-6">Intenta ajustar los filtros de búsqueda</p>
 			<Button variant="outline" @click="() => { searchQuery = ''; zoneFilter = 'all' }">Limpiar filtros</Button>
@@ -959,7 +958,7 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 						</template>
 						<template v-else>
 							<div class="h-44 w-full flex items-center justify-center bg-gray-100">
-								<PiggyBank class="h-20 w-20 text-muted-foreground" />
+								<img src="/images/Vaca.png" alt="Vaca" class="h-40 w-40 select-none" />
 							</div>
 						</template>
 						
@@ -1011,7 +1010,7 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 					  </template>
 					  <template v-else>
 						<div class="h-16 w-16 rounded-lg flex items-center justify-center bg-gray-100 shrink-0">
-							<PiggyBank class="h-8 w-8 text-muted-foreground" />
+							<img src="/images/Vaca.png" alt="Vaca" class="h-12 w-12 select-none" />
 						</div>
 					  </template>
 
@@ -1068,7 +1067,7 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 								</template>
 								<template v-else>
 									<div class="w-44 h-36 rounded-lg flex items-center justify-center bg-gray-100">
-										<PiggyBank class="h-12 w-12 text-muted-foreground" />
+										<img src="/images/Vaca.png" alt="Vaca" class="h-25 w-25 select-none" />
 									</div>
 								</template>
 								<div class="hidden md:block">
@@ -1329,7 +1328,7 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 							</template>
 							<template v-else>
 								<div class="w-full h-40 rounded-lg flex items-center justify-center bg-gray-100">
-									<PiggyBank class="h-12 w-12 text-muted-foreground" />
+												<img src="/images/Vaca.png" alt="Vaca" class="h-16 w-16 select-none" />
 								</div>
 							</template>
 							<button @click.prevent="editTemp.image = ''" class="absolute right-3 top-3 h-8 w-8 rounded-full bg-destructive text-white flex items-center justify-center">×</button>
