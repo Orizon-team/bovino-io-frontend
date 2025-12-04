@@ -60,6 +60,8 @@ type Cattle = {
 	image?: string | null
 	zone: string | null
 	lastSeen: string
+	status?: string
+	battery_level?: number
 	behaviorStats?: BehaviorStats
 	notes?: string
 	beacons?: string[]
@@ -92,8 +94,8 @@ const cattleToDelete = ref<Cattle | null>(null)
 const zones = computed(() => availableZones.value.map(z => z.name))
 
 // temp state for add / edit dialogs (avoid nullable types in v-models)
-const tempAdd = reactive({ tag: '', image: '', zone: '', notes: '', beacons: [] as string[], customId: '' })
-const editTemp = reactive({ id: 0, tag: '', image: '', zone: '', notes: '', beacons: [] as string[] })
+const tempAdd = reactive({ tag: '', image: '', zone: '', notes: '', beacons: [] as string[], customId: '', favorite_food: '' })
+const editTemp = reactive({ id: 0, tag: '', image: '', zone: '', notes: '', beacons: [] as string[], ear_tag: '', favorite_food: '' })
 
 // validation state
 const addErrors = reactive({ tag: '', image: '', zone: '', customId: '' })
@@ -144,14 +146,35 @@ const mapCowToCattle = (cow: Cow): Cattle => {
 	console.log('current_location (ZONA):', cow.tag?.current_location)
 	console.log('---')
 	
+	// Formatear la última transmisión si existe
+	const formatLastSeen = (lastTransmission?: string): string => {
+		if (!lastTransmission) return 'Sin señal'
+		try {
+			const date = new Date(lastTransmission)
+			const now = new Date()
+			const diffMs = now.getTime() - date.getTime()
+			const diffMins = Math.floor(diffMs / 60000)
+			if (diffMins < 1) return 'Hace unos momentos'
+			if (diffMins < 60) return `Hace ${diffMins} minutos`
+			const diffHours = Math.floor(diffMins / 60)
+			if (diffHours < 24) return `Hace ${diffHours} horas`
+			const diffDays = Math.floor(diffHours / 24)
+			return `Hace ${diffDays} días`
+		} catch {
+			return 'Sin señal'
+		}
+	}
+	
 	return {
 		id: cow.id,
 		tag: cow.name,
 		image: cow.image || null,
 		zone: cow.tag?.current_location || null,
-		lastSeen: 'Hace unos momentos',
+		lastSeen: formatLastSeen(cow.tag?.last_transmission),
+		status: cow.tag?.status || 'unknown',
+		battery_level: cow.tag?.battery_level,
 		notes: cow.favorite_food ? `Comida favorita: ${cow.favorite_food}` : '',
-		beacons: cow.tag ? [cow.tag.id_tag] : [],
+		beacons: cow.tag?.id ? [String(cow.tag.id)] : [],
 		ear_tag: cow.ear_tag,
 		favorite_food: cow.favorite_food,
 		tag_id: cow.tag?.id
@@ -213,7 +236,7 @@ const loadZones = async () => {
 	}
 }
 
-onMounted(() => {
+onMounted(async () => {
 	const filter = route.query.filter as string | undefined
 	if (filter === 'online') zoneFilter.value = 'online'
 	else if (filter === 'offline') zoneFilter.value = 'offline'
@@ -221,9 +244,9 @@ onMounted(() => {
 	// Cargar usuario desde localStorage
 	loadUser()
 	
-	// Cargar zonas y datos desde la API
-	loadZones()
-	loadCattle()
+	// Cargar zonas y datos desde la API de forma secuencial
+	await loadZones()
+	await loadCattle()
 
 	// Inicializar WebSocket y suscribirse a eventos de registro de vacas
 	wsClient.connect({
@@ -252,6 +275,8 @@ onMounted(() => {
 					// Preferir ear_tag (campo que usan en la BD) si está presente
 					if (payload.ear_tag) {
 						tempAdd.customId = String(payload.ear_tag)
+					} else if (payload.id_tag) {
+						tempAdd.customId = String(payload.id_tag)
 					} else if (payload.tag_id) {
 						tempAdd.customId = String(payload.tag_id)
 					} else if (payload.tag && payload.tag.id_tag) {
@@ -260,7 +285,7 @@ onMounted(() => {
 
 					// también mantener beacons si se usa en otros flujos
 					tempAdd.beacons = []
-					if (tempAdd.customId) tempAdd.beacons.push(tempAdd.customId)
+					if (payload.tag_id) tempAdd.beacons.push(String(payload.tag_id))
 
 					// mac_address -> anotar en notas para referencia
 					if (payload.mac_address) tempAdd.notes = `MAC: ${payload.mac_address}`
@@ -311,11 +336,8 @@ onMounted(() => {
 		},
 		onCowError: (err) => {
 			console.warn('onCowError (Mi_ganado):', err)
-			// mostrar error breve si aplica
-			if (err && err.message) {
-				error.value = err.message
-				setTimeout(() => { error.value = null }, 5000)
-			}
+			// No mostrar errores de conexión del servidor al usuario
+			// Solo registrar en consola para debugging
 		}
 	})
 })
@@ -333,8 +355,7 @@ watch([detailModalOpen, selectedCattle], ([open, cattle]) => {
 	try {
 		if (open && cattle && cattle.id) {
 			wsClient.subscribeCow(Number(cattle.id))
-			// también solicitar snapshot puntual para sincronizar
-			wsClient.getCow(Number(cattle.id))
+			// No llamar getCow() para evitar conexiones adicionales
 		} else if (!open && cattle && cattle.id) {
 			wsClient.unsubscribeCow(Number(cattle.id))
 		}
@@ -442,43 +463,59 @@ const handleAddCattle = async (newCattle: any) => {
 			return
 		}
 		
-		console.log('%c🆕 CREANDO NUEVA VACA CON TAG ÚNICO', 'background: #4CAF50; color: white; font-size: 16px; font-weight: bold; padding: 6px;')
-		
-		// 1. CREAR UN TAG ÚNICO para esta vaca (id_tag debe ser numérico)
-		const uniqueTagId = generateNumericTagId()
-		const macAddress = `MAC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+		// Obtener el ear_tag si fue proporcionado (no forzar a número)
+		const cowEarTag = newCattle.customId && String(newCattle.customId).trim() !== ''
+			? String(newCattle.customId).trim()
+			: undefined
 
-		console.log('📍 Creando tag único (numérico id_tag):', uniqueTagId)
-		console.log('📡 MAC Address:', macAddress)
-		console.log('🗺️ Zona inicial:', newCattle.zone || 'Sin zona')
+		if (cowEarTag !== undefined) {
+			console.log('🆔 ear_tag personalizado del animal:', cowEarTag)
+		}
 		
-				// Obtener el ear_tag si fue proporcionado (no forzar a número)
-				const cowEarTag = newCattle.customId && String(newCattle.customId).trim() !== ''
-					? String(newCattle.customId).trim()
-					: undefined
+		// Verificar si viene un tag_id existente (desde WebSocket)
+		const existingTagId = newCattle.beacons && newCattle.beacons.length > 0 
+			? parseInt(newCattle.beacons[0]) 
+			: null
+		
+		let tagIdToUse: number
+		
+		if (existingTagId && !isNaN(existingTagId)) {
+			// Usar tag existente (viene del WebSocket)
+			console.log('%c🔗 RELACIONANDO VACA CON TAG EXISTENTE', 'background: #2196F3; color: white; font-size: 16px; font-weight: bold; padding: 6px;')
+			console.log('📍 Tag ID existente:', existingTagId)
+			console.log('🗺️ Zona asignada:', newCattle.zone || 'Sin zona')
+			tagIdToUse = existingTagId
+		} else {
+			// Crear un tag nuevo (flujo manual)
+			console.log('%c🆕 CREANDO NUEVA VACA CON TAG ÚNICO', 'background: #4CAF50; color: white; font-size: 16px; font-weight: bold; padding: 6px;')
+			
+			const uniqueTagId = generateNumericTagId()
+			const macAddress = `MAC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
 
-				if (cowEarTag !== undefined) {
-					console.log('🆔 ear_tag personalizado del animal:', cowEarTag)
-				}
+			console.log('📍 Creando tag único (numérico id_tag):', uniqueTagId)
+			console.log('📡 MAC Address:', macAddress)
+			console.log('🗺️ Zona inicial:', newCattle.zone || 'Sin zona')
+			
+			const newTag = await createTag({
+				id_tag: uniqueTagId,
+				mac_address: macAddress,
+				battery_level: 100,
+				status: 'active',
+				last_transmission: new Date().toISOString(),
+				current_location: newCattle.zone || ''
+			})
+			
+			console.log('✅ Tag creado exitosamente:', newTag)
+			tagIdToUse = newTag.id
+		}
 		
-		const newTag = await createTag({
-			id_tag: uniqueTagId,
-			mac_address: macAddress,
-			battery_level: 100,
-			status: 'active',
-			last_transmission: new Date().toISOString(),
-			current_location: newCattle.zone || ''
-		})
-		
-		console.log('✅ Tag creado exitosamente:', newTag)
-		
-		// 2. CREAR LA VACA con el tag_id único y opcionalmente el ID personalizado
+		// 2. CREAR LA VACA con el tag_id (existente o nuevo)
 		let createdCow: Cow
 		
 		// Si hay un archivo seleccionado, usar el endpoint REST con imagen
 		if (selectedFile.value) {
 			createdCow = await createCowWithImage(
-				newTag.id, // Usar el ID del tag recién creado
+				tagIdToUse, // Usar el tag_id (existente o nuevo)
 				newCattle.tag || `Ganado ${Date.now()}`,
 				userId.value,
 				newCattle.notes || 'Sin información adicional',
@@ -489,9 +526,9 @@ const handleAddCattle = async (newCattle: any) => {
 			// Si no hay imagen, usar GraphQL createVaca
 			const createInput: any = {
 				nombre: newCattle.tag || `Ganado ${Date.now()}`,
-				comida_preferida: newCattle.notes || 'No especificada',
+				comida_preferida: newCattle.favorite_food || 'No especificada',
 				id_usuario: userId.value,
-				tag_id: newTag.id // Usar el ID del tag recién creado
+				tag_id: tagIdToUse // Usar el tag_id (existente o nuevo)
 			}
 			
 			// Agregar ear_tag si fue proporcionado
@@ -503,7 +540,7 @@ const handleAddCattle = async (newCattle: any) => {
 		}
 		
 		console.log('✅ Vaca creada exitosamente:', createdCow)
-		console.log('🔗 Vaca ID:', createdCow.id, '- Tag ID:', newTag.id)
+		console.log('🔗 Vaca ID:', createdCow.id, '- Tag ID:', tagIdToUse)
 		
 		addDialogOpen.value = false
 		
@@ -531,6 +568,8 @@ const handleEditCattle = (cattle: Cattle) => {
 	editTemp.zone = cattle.zone ?? ''
 	editTemp.notes = cattle.notes ?? ''
 	editTemp.beacons = cattle.beacons ? [...cattle.beacons] : []
+	editTemp.ear_tag = cattle.ear_tag ?? ''
+	editTemp.favorite_food = cattle.favorite_food ?? ''
 	editDialogOpen.value = true
 }
 const handleDeleteCattle = (cattle: Cattle) => {
@@ -604,7 +643,8 @@ const saveEditFromTemp = async () => {
 
 			console.log('¿Zona cambió?:', editTemp.zone !== currentCattle?.zone)
 
-			if (effectiveTagId) {
+	
+				if (effectiveTagId) {
 				// Contar si este tag está siendo usado por otras vacas
 				const tagUsageCount = cattleList.value.filter(c => c.tag_id === currentCattle?.tag_id).length
 				console.log('Uso del tag por vacas en la lista:', tagUsageCount)
@@ -638,8 +678,8 @@ const saveEditFromTemp = async () => {
 					// Tag único: es seguro actualizar el tag directamente
 					if (!DISABLE_TAG_UPDATE) {
 						console.log('%c📍 ACTUALIZANDO ZONA DEL TAG (único)', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px;')
-						const updatePayload: { current_location?: string } = {}
-						updatePayload.current_location = editTemp.zone === '' || editTemp.zone === null ? '' : editTemp.zone
+						const updatePayload: { current_location?: string | null } = {}
+						updatePayload.current_location = editTemp.zone === '' || editTemp.zone === null ? null : editTemp.zone
 						console.log('📤 Payload enviado al backend:', JSON.stringify(updatePayload, null, 2))
 						try {
 							const result = await updateTag(effectiveTagId, updatePayload)
@@ -667,7 +707,8 @@ const saveEditFromTemp = async () => {
 		// Preparar payload de actualización de vaca. Si creamos un tag nuevo, asignarlo aquí.
 		const vacaUpdatePayload: any = {
 			nombre: editTemp.tag,
-			comida_preferida: editTemp.notes || undefined,
+			comida_preferida: editTemp.favorite_food || undefined,
+			ear_tag: editTemp.ear_tag || undefined,
 		}
 		if ((editTemp as any)._newTagId) {
 			vacaUpdatePayload.tag_id = (editTemp as any)._newTagId
@@ -676,71 +717,26 @@ const saveEditFromTemp = async () => {
 		await updateVaca(id, vacaUpdatePayload)
 		console.log('✅ Datos de la vaca actualizados')
 
-		if (!DISABLE_TAG_UPDATE) {
-			// Intentar obtener la vaca actualizada desde el backend para asegurar persistencia
-			try {
-				const freshCow = await getVacaById(id)
-				if (freshCow) {
-					const mapped = mapCowToCattle(freshCow)
-					cattleList.value = cattleList.value.map(c => (c.id === id ? mapped : c))
-					// actualizar selectedCattle si está abierto
-					if (selectedCattle.value && selectedCattle.value.id === id) {
-						selectedCattle.value = { ...selectedCattle.value, ...mapped }
-					}
-					console.log('%c🔄 Estado sincronizado con backend (vaca recargada)', 'background:#4CAF50;color:white;padding:4px', mapped)
-				} else {
-					console.warn('No se obtuvo la vaca actualizada del backend')
-				}
-			} catch (fetchErr: any) {
-				console.error('Error al obtener la vaca actualizada del backend:', fetchErr)
-				// como fallback, actualizar localmente para que el usuario vea los cambios
-				try {
-					const updatedCattle = {
-						id,
-						tag: editTemp.tag,
-						image: editTemp.image || currentCattle?.image || null,
-						zone: editTemp.zone === '' ? null : editTemp.zone,
-						lastSeen: currentCattle?.lastSeen || 'Hace unos momentos',
-						notes: editTemp.notes || currentCattle?.notes || '',
-						beacons: editTemp.beacons && editTemp.beacons.length ? [...editTemp.beacons] : currentCattle?.beacons || [],
-						ear_tag: currentCattle?.ear_tag,
-						favorite_food: currentCattle?.favorite_food,
-						tag_id: currentCattle?.tag_id,
-					}
-
-					cattleList.value = cattleList.value.map(c => c.id === id ? updatedCattle : c)
-					if (selectedCattle.value && selectedCattle.value.id === id) {
-						selectedCattle.value = { ...selectedCattle.value, ...updatedCattle }
-					}
-				} catch (updateLocalErr) {
-					console.warn('No se pudo actualizar localmente la vaca como fallback:', updateLocalErr)
-				}
-			}
-		} else {
-			// DISABLE_TAG_UPDATE = true -> no persistimos la zona en backend; aplicamos update local como comportamiento seguro
-			console.warn('⚠️ DISABLE_TAG_UPDATE está activo: aplicando cambio de zona SOLO localmente (no se persistirá en backend)')
-			try {
-				const updatedCattle = {
-					id,
-					tag: editTemp.tag,
-					image: editTemp.image || currentCattle?.image || null,
-					zone: editTemp.zone === '' ? null : editTemp.zone,
-					lastSeen: currentCattle?.lastSeen || 'Hace unos momentos',
-					notes: editTemp.notes || currentCattle?.notes || '',
-					beacons: editTemp.beacons && editTemp.beacons.length ? [...editTemp.beacons] : currentCattle?.beacons || [],
-					ear_tag: currentCattle?.ear_tag,
-					favorite_food: currentCattle?.favorite_food,
-					tag_id: currentCattle?.tag_id,
-				}
-
-				cattleList.value = cattleList.value.map(c => c.id === id ? updatedCattle : c)
-				if (selectedCattle.value && selectedCattle.value.id === id) {
-					selectedCattle.value = { ...selectedCattle.value, ...updatedCattle }
-				}
-			} catch (updateLocalErr) {
-				console.warn('No se pudo actualizar localmente la vaca al aplicar DISABLE_TAG_UPDATE:', updateLocalErr)
-			}
+		// Actualizar solo localmente para evitar conexiones adicionales
+		const updatedCattle: Cattle = {
+			id,
+			tag: editTemp.tag,
+			image: editTemp.image || currentCattle?.image || null,
+			zone: editTemp.zone === '' ? null : editTemp.zone,
+			lastSeen: currentCattle?.lastSeen || 'Hace unos momentos',
+			notes: editTemp.notes || currentCattle?.notes || '',
+			beacons: editTemp.beacons && editTemp.beacons.length ? [...editTemp.beacons] : currentCattle?.beacons || [],
+			ear_tag: editTemp.ear_tag,
+			favorite_food: editTemp.favorite_food,
+			tag_id: (editTemp as any)._newTagId || currentCattle?.tag_id,
+			behaviorStats: currentCattle?.behaviorStats
 		}
+
+		cattleList.value = cattleList.value.map(c => (c.id === id ? updatedCattle : c))
+		if (selectedCattle.value && selectedCattle.value.id === id) {
+			selectedCattle.value = { ...selectedCattle.value, ...updatedCattle }
+		}
+		console.log('✅ Animal actualizado localmente sin recargar la lista completa')
 
 		editDialogOpen.value = false
 		cattleToEdit.value = null
@@ -750,6 +746,8 @@ const saveEditFromTemp = async () => {
 		editTemp.zone = ''
 		editTemp.notes = ''
 		editTemp.beacons = []
+		editTemp.ear_tag = ''
+		editTemp.favorite_food = ''
 		// limpiar cualquier tag temporal creado durante la edición
 		if ((editTemp as any)._newTagId) delete (editTemp as any)._newTagId
 	} catch (err: any) {
@@ -798,6 +796,7 @@ const handleConfirmAdd = async () => {
 				notes: tempAdd.notes,
 				beacons: tempAdd.beacons,
 				customId: tempAdd.customId,
+				favorite_food: tempAdd.favorite_food,
 			})
 
 		// Reset temporary add form
@@ -807,6 +806,7 @@ const handleConfirmAdd = async () => {
 		tempAdd.notes = ''
 		tempAdd.beacons = []
 		tempAdd.customId = ''
+		tempAdd.favorite_food = ''
 
 		// revoke object URL if any
 		if (currentAddObjectUrl) {
@@ -832,14 +832,13 @@ const handleConfirmDelete = async () => {
 		// Llamar a la API para eliminar
 		await deleteVaca(idToDelete)
 		
-		// Eliminar localmente
+		// Eliminar localmente (no recargar toda la lista para evitar conexiones adicionales)
 		cattleList.value = cattleList.value.filter((c) => c.id !== idToDelete)
 		
 		deleteDialogOpen.value = false
 		cattleToDelete.value = null
 		
-		// Recargar lista para confirmar
-		await loadCattle()
+		console.log('✅ Animal eliminado correctamente')
 	} catch (err: any) {
 		console.error('Error al eliminar ganado:', err)
 		error.value = err.message || 'Error al eliminar el ganado. Por favor, intenta nuevamente.'
@@ -847,6 +846,27 @@ const handleConfirmDelete = async () => {
 	} finally {
 		isLoading.value = false
 	}
+}
+
+/**
+ * Helper: devuelve el texto de estado a mostrar en la tarjeta/modal.
+ * Se deja sencillo: si no hay lastSeen mostramos "Sin señal", si existe devolvemos el propio lastSeen.
+ */
+const getStatusText = (lastSeen?: string | null): string => {
+	if (!lastSeen || lastSeen === '') return 'Sin señal'
+	return lastSeen
+}
+
+/**
+ * Helper: devuelve clases de Badge según el estado (lastSeen).
+ * - Si no hay lastSeen -> estilo destructivo
+ * - Si hay lastSeen -> estilo positivo
+ */
+const getBadgeClass = (lastSeen?: string | null): string => {
+	if (!lastSeen || lastSeen === '') {
+		return 'bg-red-100 text-red-700 px-2 py-1'
+	}
+	return 'bg-emerald-100 text-emerald-700 px-2 py-1'
 }
 </script>
 
@@ -960,10 +980,9 @@ const handleConfirmDelete = async () => {
 					</div>
 
 					<div class="w-full p-4">
-						<div class="flex items-center justify-between mb-1">
-							<span class="text-sm font-bold text-foreground">ID: {{ cattle.id }}</span>
-							<Badge v-if="cattle.zone" class="bg-emerald-100 text-emerald-700">En línea</Badge>
-							<Badge v-else variant="destructive">Desconocido</Badge>
+						<div class="flex justify-between items-center">
+							<p class="text-sm font-semibold text-gray-600">{{ cattle.ear_tag || `ID: ${cattle.id}` }}</p>
+							<Badge :class="getBadgeClass(cattle.lastSeen)">{{ getStatusText(cattle.lastSeen) }}</Badge>
 						</div>
 						<h3 class="font-semibold text-lg text-foreground truncate">{{ cattle.tag }}</h3>
 						<div class="flex items-center gap-2 text-sm text-muted-foreground mt-2">
@@ -999,7 +1018,7 @@ const handleConfirmDelete = async () => {
 					<div class="flex-1 min-w-0">
 						<div class="flex items-center gap-2 mb-1">
 							<h3 class="font-semibold text-lg text-foreground truncate">{{ cattle.tag }}</h3>
-							<Badge variant="outline" class="text-xs">ID: {{ cattle.id }}</Badge>
+							<Badge variant="outline" class="text-xs">{{ cattle.ear_tag || `ID: ${cattle.id}` }}</Badge>
 						</div>
 					<div class="flex items-center gap-4 text-sm text-muted-foreground">
 						<template v-if="cattle.zone">
@@ -1060,26 +1079,27 @@ const handleConfirmDelete = async () => {
 										<div class="md:col-span-2">
 											<div class="flex flex-col md:flex-row md:items-start md:justify-between">
 																<div class="max-w-lg">
-																	<h3 class="text-3xl font-extrabold leading-tight">ID: {{ selectedCattle?.id }}</h3>
+																	<h3 class="text-3xl font-extrabold leading-tight">Etiqueta: {{ selectedCattle?.ear_tag }}</h3>
 																	<p class="text-xl font-semibold mt-1">{{ selectedCattle?.tag }}</p>
 																</div>
 									<div class="mt-3 md:mt-0 flex flex-col gap-2">
-										<div class="flex items-center gap-2">
-											<span class="text-sm text-muted-foreground">Ubicación Actual:</span>
-											<div class="flex items-center gap-2">
-													<MapPin class="h-4 w-4 text-primary" />
-													<Badge class="bg-emerald-100 text-emerald-700 px-2 py-1">{{ selectedCattle?.zone || 'Sin ubicación' }}</Badge>
-											</div>
-										</div>
-
-										<div class="flex items-center gap-2">
+								<div class="flex items-center gap-2">
+									<span class="text-sm text-muted-foreground">Ubicación Actual:</span>
+									<div class="flex items-center gap-2">
+											<MapPin class="h-4 w-4 text-primary" />
+											<Badge v-if="selectedCattle?.zone" class="bg-emerald-100 text-emerald-700 px-2 py-1">{{ selectedCattle.zone }}</Badge>
+											<Badge v-else variant="destructive" class="px-2 py-1">Sin ubicación</Badge>
+									</div>
+								</div>										<div class="flex items-center gap-2">
 											<div class="text-sm text-muted-foreground">Última detección:</div>
 											<div class="text-sm font-medium">{{ selectedCattle?.lastSeen }}</div>
 										</div>
 
 										<div class="flex items-center gap-2">
 											<div class="text-sm text-muted-foreground">Estado:</div>
-											<Badge class="bg-green-100 text-green-700 px-2 py-1">{{ selectedCattle?.zone ? 'Monitoreado' : 'Sin señal' }}</Badge>
+											<Badge v-if="selectedCattle?.status === 'active'" class="bg-green-100 text-green-700 px-2 py-1">Activo</Badge>
+											<Badge v-else-if="selectedCattle?.status === 'inactive'" class="bg-gray-100 text-gray-700 px-2 py-1">Inactivo</Badge>
+											<Badge v-else variant="destructive" class="px-2 py-1">Sin señal</Badge>
 										</div>
 									</div>
 								</div>
@@ -1194,10 +1214,10 @@ const handleConfirmDelete = async () => {
 
 					<!-- ID del Animal (opcional, puede proporcionarlo el usuario) -->
 					<div>
-						<label class="block text-sm font-medium mt-1">ID del Animal (ear_tag)</label>
+						<label class="block text-sm font-medium mt-1">Numero de etiqueta</label>
 						<input v-model="tempAdd.customId" class="w-full rounded-md border p-2 bg-white!" placeholder="Dejar vacío para generar automáticamente" />
 						<div v-if="addErrors.customId" class="text-destructive text-sm mt-1">{{ addErrors.customId }}</div>
-						<div v-else class="text-xs text-muted-foreground mt-1">Si lo proporcionas, se usará como ID de la vaca. Debe ser numérico.</div>
+						<div v-else class="text-xs text-muted-foreground mt-1">Si lo proporcionas, se usará como ID de la vaca.</div>
 					</div>						<!-- Zona inicial (select) - OPCIONAL -->
 						<div>
 						<!--	<label class="block text-sm font-medium mt-3">Zona Inicial (opcional)</label>
@@ -1240,13 +1260,6 @@ const handleConfirmDelete = async () => {
 							</div>
 							<div v-if="addErrors.image" class="text-destructive text-sm mt-1">{{ addErrors.image }}</div>
 						</div>
-
-						<!-- beacons and notes 
-						<label class="block text-sm font-medium mt-3">Beacons</label>
-						<div class="flex gap-2 mt-2">
-						<input v-model="addBeaconInput" placeholder="Agregar beacon (ID)" class="flex-1 rounded-md border p-2" />
-						<button @click.prevent="addBeaconToTemp" class="px-3 py-2 bg-primary text-white rounded-md">Agregar</button>
-					</div>-->
 					<div class="flex gap-2 flex-wrap mt-2">
 						<span v-for="(b, idx) in tempAdd.beacons" :key="b" class="inline-flex items-center gap-2 bg-white border border-gray-200 px-3 py-1 rounded-md text-sm">
 							{{ b }}
@@ -1254,8 +1267,8 @@ const handleConfirmDelete = async () => {
 						</span>
 					</div>
 
-					<label class="block text-sm font-medium mt-3">Notas Adicionales</label>
-						<textarea v-model="tempAdd.notes" placeholder="Información adicional sobre el animal..." class="w-full rounded-md border p-3 h-24"></textarea>
+					<label class="block text-sm font-medium mt-3">Comida Preferida</label>
+						<textarea v-model="tempAdd.favorite_food" placeholder="Ej: Alfalfa, Maíz, Pasto fresco..." class="w-full rounded-md border p-3 h-24 bg-white!"></textarea>
 						
 						<!-- Error message -->
 						<div v-if="error" class="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
@@ -1281,68 +1294,70 @@ const handleConfirmDelete = async () => {
 					<DialogDescription>Modifica la información del animal</DialogDescription>
 				</DialogHeader>
 
-							<div class="py-4 space-y-3">
-								<template v-if="editTemp.id !== 0">
-									<!-- Nombre / Tag -->
-									<label class="block text-sm font-medium">Nombre<span class="text-destructive">*</span></label>
-									<Input class="bg-white!" v-model="editTemp.tag" placeholder="Nombre / Apodo" />
-									<div v-if="editErrors.tag" class="text-destructive text-sm mt-1 ">{{ editErrors.tag }}</div>
+				<div class="py-4 space-y-3">
+					<template v-if="editTemp.id !== 0">
+						<!-- Nombre / Tag -->
+						<label class="block text-sm font-medium">Nombre<span class="text-destructive">*</span></label>
+						<Input class="bg-white!" v-model="editTemp.tag" placeholder="Nombre / Apodo" />
+						<div v-if="editErrors.tag" class="text-destructive text-sm mt-1 ">{{ editErrors.tag }}</div>
 
-							<!-- ID (no editable) -->
-							<label class="block text-sm font-medium mt-3">ID del Animal</label>
-							<input class="w-full rounded-md border p-2 bg-white!" :value="editTemp.id" disabled />
-							<div class="text-xs text-muted-foreground mt-1">El ID no se puede modificar</div>								<!-- Zona Actual (select) -->
-								<label class="block text-sm font-medium mt-3">Zona Actual</label>
-								<Select v-model="editTemp.zone">
-									<SelectTrigger class="w-full">
-										<SelectValue placeholder="Selecciona una zona (opcional)" />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="">Sin zona asignada</SelectItem>
-										<template v-for="z in zones" :key="z">
-											<SelectItem :value="z">{{ z }}</SelectItem>
-										</template>
-									</SelectContent>
-								</Select>
-								<div class="text-xs text-muted-foreground mt-1">La zona se actualiza automáticamente según el tag</div>
+						<!-- ID (no editable) -->
+						<label class="block text-sm font-medium mt-3">ID del Animal (ear_tag)</label>
+						<Input class="w-full rounded-md border p-2 bg-white!" v-model="editTemp.ear_tag" placeholder="Ej: VA-120" />
+						<div class="text-xs text-muted-foreground mt-1">ID único del animal.</div>
 
-								<!-- Imagen preview con boton eliminar -->
-									<label class="block text-sm font-medium mt-3">Imagen del Animal</label>
-									<div class="relative mt-2">
-										<template v-if="editTemp.image">
-											<img :src="editTemp.image" alt="preview" class="w-full h-40 object-cover rounded-lg" />
-										</template>
-										<template v-else>
-											<div class="w-full h-40 rounded-lg flex items-center justify-center bg-gray-100">
-												<PiggyBank class="h-12 w-12 text-muted-foreground" />
-											</div>
-										</template>
-										<button @click.prevent="editTemp.image = ''" class="absolute right-3 top-3 h-8 w-8 rounded-full bg-destructive text-white flex items-center justify-center">×</button>
-									</div>
-
-									<!-- Beacons: show existing and add new -->
-									<label class="block text-sm font-medium mt-3">Beacons</label>
-									<div class="flex items-center gap-2 mt-2">
-									<input v-model="editBeaconInput" placeholder="Agregar beacon (ID)" class="flex-1 rounded-md border p-2" />
-									<button @click.prevent="addBeaconToEdit" class="px-3 py-2 bg-primary text-white rounded-md">Agregar</button>
-								</div>
-								<div class="flex gap-2 flex-wrap mt-2">
-									<span v-for="(b, idx) in editTemp.beacons" :key="b" class="inline-flex items-center gap-2 bg-white border border-gray-200 px-3 py-1 rounded-md text-sm">
-										{{ b }}
-										<button @click.prevent="removeBeaconFromEdit(idx)" class="ml-1 text-sm text-destructive">✕</button>
-									</span>
-								</div>
-
-								<!-- Notas adicionales -->
-									<label class="block text-sm font-medium mt-3">Notas Adicionales</label>
-									<textarea v-model="editTemp.notes" placeholder="Información adicional sobre el animal..." class="w-full rounded-md border p-3 h-28"></textarea>
+						<!-- Zona Actual (select) -->
+						<label class="block text-sm font-medium mt-3">Zona Actual</label>
+						<Select v-model="editTemp.zone">
+							<SelectTrigger class="w-full">
+								<SelectValue placeholder="Selecciona una zona (opcional)" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="">Sin zona asignada</SelectItem>
+								<template v-for="z in zones" :key="z">
+									<SelectItem :value="z">{{ z }}</SelectItem>
 								</template>
-							</div>
+							</SelectContent>
+						</Select>
+						<div class="text-xs text-muted-foreground mt-1">La zona se actualiza automáticamente según el tag</div>
 
-							<DialogFooter>
-								<Button variant="outline" @click="editDialogOpen = false">Cancelar</Button>
-								<Button :disabled="!canSaveEdit" v-if="editTemp.id !== 0" @click="saveEditFromTemp" class="bg-primary text-primary-foreground hover:bg-primary/90">Guardar</Button>
-							</DialogFooter>
+						<!-- Imagen preview con boton eliminar -->
+						<label class="block text-sm font-medium mt-3">Imagen del Animal</label>
+						<div class="relative mt-2">
+							<template v-if="editTemp.image">
+								<img :src="editTemp.image" alt="preview" class="w-full h-40 object-cover rounded-lg" />
+							</template>
+							<template v-else>
+								<div class="w-full h-40 rounded-lg flex items-center justify-center bg-gray-100">
+									<PiggyBank class="h-12 w-12 text-muted-foreground" />
+								</div>
+							</template>
+							<button @click.prevent="editTemp.image = ''" class="absolute right-3 top-3 h-8 w-8 rounded-full bg-destructive text-white flex items-center justify-center">×</button>
+						</div>
+
+						<!-- Beacons: show existing and add new -->
+						<label class="block text-sm font-medium mt-3">Beacons</label>
+						<div class="flex items-center gap-2 mt-2">
+							<input v-model="editBeaconInput" placeholder="Agregar beacon (ID)" class="flex-1 rounded-md border p-2" />
+							<button @click.prevent="addBeaconToEdit" class="px-3 py-2 bg-primary text-white rounded-md">Agregar</button>
+						</div>
+						<div class="flex gap-2 flex-wrap mt-2">
+							<span v-for="(b, idx) in editTemp.beacons" :key="b" class="inline-flex items-center gap-2 bg-white border border-gray-200 px-3 py-1 rounded-md text-sm">
+								{{ b }}
+								<button @click.prevent="removeBeaconFromEdit(idx)" class="ml-1 text-sm text-destructive">✕</button>
+							</span>
+						</div>
+
+						<!-- Notas adicionales -->
+						<label class="block text-sm font-medium mt-3">Comida Preferida</label>
+						<textarea v-model="editTemp.favorite_food" placeholder="Ej: Alfalfa, Maíz, Pasto fresco..." class="w-full rounded-md border p-3 h-28 bg-white!"></textarea>
+					</template>
+				</div>
+
+				<DialogFooter>
+					<Button variant="outline" @click="editDialogOpen = false">Cancelar</Button>
+					<Button :disabled="!canSaveEdit" v-if="editTemp.id !== 0" @click="saveEditFromTemp" class="bg-primary text-primary-foreground hover:bg-primary/90">Guardar</Button>
+				</DialogFooter>
 			</DialogContent>
 		</Dialog>
 

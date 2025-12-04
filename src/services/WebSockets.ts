@@ -2,8 +2,7 @@ import { io, Socket } from 'socket.io-client'
 
 // Allow overriding the WebSocket URL via Vite env var `VITE_WS_URL` for local testing.
 // Falls back to the production backend URL when not provided.
-const SOCKET_URL = (import.meta.env?.VITE_WS_URL as string) || 'https://bovino-io-backend.onrender.com'
-
+const SOCKET_URL = 'https://bovino-io-backend.onrender.com'
 /**
  * Tipo de evento de actualización de dispositivo ESP32
  */

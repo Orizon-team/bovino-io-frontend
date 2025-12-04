@@ -11,6 +11,9 @@ export type Cow = {
     id: number
     id_tag: string
     current_location?: string
+    status?: string
+    last_transmission?: string
+    battery_level?: number
   }
   user?: {
     id_user: number
@@ -25,7 +28,7 @@ export type CreateVacaInput = {
   comida_preferida: string
   id_usuario: number
   tag_id: number
-  ear_tag?: number
+  ear_tag?: string
 }
 
 export type UpdateVacaInput = {
@@ -146,6 +149,9 @@ export async function listVacas(): Promise<Cow[]> {
           id
           id_tag
           current_location
+          status
+          last_transmission
+          battery_level
         }
         user {
           id_user
@@ -265,6 +271,9 @@ export async function getVacasByUser(userId: number): Promise<Cow[]> {
           id
           id_tag
           current_location
+          status
+          last_transmission
+          battery_level
         }
         user {
           id_user

@@ -23,7 +23,7 @@ export type UpdateTagInput = {
   mac_address?: string
   battery_level?: number
   status?: string
-  current_location?: string
+  current_location?: string | null
   last_transmission?: string
 }
 
