@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, h } from 'vue'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { AlertTriangle, Radio, CheckCircle2, Clock, ChevronDown, CheckSquare } from 'lucide-vue-next'
-import { getEventsByUser, type EventFromAPI } from '@/services/Alerts'
+import { Button } from '@/components/ui/button'
+import { AlertTriangle, Radio, CheckCircle2, Clock, ChevronDown, Trash2 } from 'lucide-vue-next'
+import { getEventsByUser, deleteEvent, deleteEventsByUserAndType, type EventFromAPI } from '@/services/Alerts'
+import { useToast } from 'vue-toastification'
+
+const toast = useToast()
 
 // ============================================================================
 // TIPOS
 // ============================================================================
 
-type AlertType = 'critical' | 'warning' | 'success' | 'resolved' | 'info'
+type AlertType = 'critical' | 'warning' | 'success' | 'info'
 
 interface Alert {
   id: number
@@ -24,7 +28,6 @@ interface ExpandedGroups {
   critical: boolean
   warning: boolean
   success: boolean
-  resolved: boolean
 }
 
 // ============================================================================
@@ -35,12 +38,16 @@ const expandedGroups = ref<ExpandedGroups>({
   critical: true,
   warning: true,
   success: true,
-  resolved: true,
 })
 
 const alerts = ref<Alert[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
+const deletingAlerts = ref<Set<number>>(new Set())
+const deletingAllByType = ref<Set<AlertType>>(new Set())
+
+const deletedAlertsTemp = ref<Alert[]>([])
+let undoTimeoutId: number | null = null
 
 // ============================================================================
 // COMPUTED
@@ -49,7 +56,6 @@ const error = ref<string | null>(null)
 const criticalAlerts = computed(() => alerts.value.filter((a) => a.type === 'critical'))
 const warningAlerts = computed(() => alerts.value.filter((a) => a.type === 'warning'))
 const successAlerts = computed(() => alerts.value.filter((a) => a.type === 'success'))
-const resolvedAlerts = computed(() => alerts.value.filter((a) => a.type === 'resolved'))
 
 // ============================================================================
 // FUNCIONES - Mapeo de eventos a alertas
@@ -70,11 +76,24 @@ const mapEventTypeToAlertType = (eventType: string): AlertType => {
   if (type.includes('success') || type.includes('exito') || type.includes('ok')) {
     return 'success'
   }
-  if (type.includes('resolved') || type.includes('resuelto')) {
-    return 'resolved'
-  }
   
   return 'info'
+}
+
+/**
+ * Mapea el tipo de alerta de UI al tipo de evento de la API
+ */
+const mapAlertTypeToEventType = (alertType: AlertType): string => {
+  switch (alertType) {
+    case 'critical':
+      return 'CRITICAL'
+    case 'warning':
+      return 'ALERT'
+    case 'success':
+      return 'SUCCESS'
+    default:
+      return 'INFO'
+  }
 }
 
 /**
@@ -149,6 +168,166 @@ const loadEvents = async () => {
 }
 
 // ============================================================================
+// FUNCIONES - Toast con Undo
+// ============================================================================
+
+/**
+ * Muestra un toast con mensaje y botón de deshacer
+ */
+const showUndoToast = (count: number, onUndo: () => void) => {
+  const ToastContent = {
+    render() {
+      return h('div', { class: 'flex items-center justify-between gap-4 w-full' }, [
+        h('span', `Se ${count === 1 ? 'borró' : 'borraron'} ${count} notificación${count !== 1 ? 'es' : ''}`),
+        h(
+          'button',
+          {
+            onClick: onUndo,
+            class: 'px-3 py-1 text-sm font-medium bg-white text-gray-900 rounded hover:bg-gray-100 transition-colors',
+          },
+          'Deshacer'
+        ),
+      ])
+    }
+  }
+
+  toast.success(ToastContent, {
+    timeout: 5000,
+    onClose: () => {
+      // Limpiar el temporal cuando se cierre el toast
+      deletedAlertsTemp.value = []
+      if (undoTimeoutId) {
+        clearTimeout(undoTimeoutId)
+        undoTimeoutId = null
+      }
+    }
+  })
+}
+
+/**
+ * Maneja el deshacer la eliminación
+ */
+const handleUndo = () => {
+  if (deletedAlertsTemp.value.length > 0) {
+    // Restaurar las alertas
+    alerts.value = [...alerts.value, ...deletedAlertsTemp.value]
+    deletedAlertsTemp.value = []
+    
+    // Cerrar todos los toasts
+    toast.clear()
+    
+    // Limpiar el timeout
+    if (undoTimeoutId) {
+      clearTimeout(undoTimeoutId)
+      undoTimeoutId = null
+    }
+    
+    toast.info('Alertas restauradas')
+  }
+}
+
+// ============================================================================
+// FUNCIONES - Eliminación de alertas
+// ============================================================================
+
+/**
+ * Elimina una alerta por ID con opción de deshacer
+ */
+const handleDeleteAlert = async (alertId: number) => {
+  try {
+    deletingAlerts.value.add(alertId)
+    
+    // Guardar la alerta antes de eliminarla
+    const alertToDelete = alerts.value.find(a => a.id === alertId)
+    if (!alertToDelete) return
+    
+    deletedAlertsTemp.value = [alertToDelete]
+    
+    // Eliminar de la UI inmediatamente
+    alerts.value = alerts.value.filter(a => a.id !== alertId)
+    
+    // Mostrar toast con opción de deshacer
+    showUndoToast(1, handleUndo)
+    
+    // Esperar 5 segundos antes de eliminar permanentemente
+    undoTimeoutId = window.setTimeout(async () => {
+      const success = await deleteEvent(alertId)
+      
+      if (success) {
+        console.log('Alerta eliminada permanentemente:', alertId)
+        deletedAlertsTemp.value = []
+      } else {
+        // Si falla, restaurar la alerta
+        alerts.value = [...alerts.value, alertToDelete]
+        error.value = 'No se pudo eliminar la alerta'
+        toast.error('Error al eliminar la alerta')
+      }
+    }, 5000)
+    
+  } catch (err) {
+    console.error('Error al eliminar alerta:', err)
+    error.value = err instanceof Error ? err.message : 'Error al eliminar la alerta'
+  } finally {
+    deletingAlerts.value.delete(alertId)
+  }
+}
+
+/**
+ * Elimina todas las alertas de un tipo específico con opción de deshacer
+ */
+const deleteAllByType = async (alertType: AlertType) => {
+  try {
+    deletingAllByType.value.add(alertType)
+    
+    const userString = localStorage.getItem('user')
+    if (!userString) {
+      throw new Error('No se encontró información del usuario')
+    }
+
+    const user = JSON.parse(userString)
+    const userId = user.id_user
+
+    if (!userId) {
+      throw new Error('ID de usuario no válido')
+    }
+
+    // Guardar las alertas antes de eliminarlas
+    const alertsToDelete = alerts.value.filter(a => a.type === alertType)
+    if (alertsToDelete.length === 0) return
+    
+    deletedAlertsTemp.value = alertsToDelete
+    
+    // Eliminar de la UI inmediatamente
+    alerts.value = alerts.value.filter(a => a.type !== alertType)
+    
+    // Mostrar toast con opción de deshacer
+    showUndoToast(alertsToDelete.length, handleUndo)
+    
+    // Esperar 5 segundos antes de eliminar permanentemente
+    undoTimeoutId = window.setTimeout(async () => {
+      const eventType = mapAlertTypeToEventType(alertType)
+      const success = await deleteEventsByUserAndType(userId, eventType)
+      
+      if (success) {
+        console.log('Alertas eliminadas permanentemente para el tipo:', alertType)
+        deletedAlertsTemp.value = []
+      } else {
+        // Si falla, restaurar las alertas
+        alerts.value = [...alerts.value, ...alertsToDelete]
+        error.value = 'No se pudo eliminar las alertas'
+        toast.error('Error al eliminar las alertas')
+      }
+    }, 5000)
+    
+  } catch (err) {
+    console.error('Error al eliminar alertas por tipo:', err)
+    error.value = err instanceof Error ? err.message : 'Error al eliminar las alertas'
+  } finally {
+    deletingAllByType.value.delete(alertType)
+  }
+}
+
+// ============================================================================
 // FUNCIONES - UI
 // ============================================================================
 
@@ -160,8 +339,6 @@ const getAlertIcon = (type: AlertType) => {
       return Clock
     case 'success':
       return CheckCircle2
-    case 'resolved':
-      return CheckSquare
     default:
       return Radio
   }
@@ -175,8 +352,6 @@ const getAlertIconClass = (type: AlertType) => {
       return 'h-5 w-5 text-amber-600'
     case 'success':
       return 'h-5 w-5 text-green-600'
-    case 'resolved':
-      return 'h-5 w-5 text-gray-600'
     default:
       return 'h-5 w-5 text-primary'
   }
@@ -190,8 +365,6 @@ const getBadgeClass = (type: AlertType) => {
       return 'bg-amber-500/10 text-amber-600 border-transparent'
     case 'success':
       return 'bg-green-500/10 text-green-600 border-transparent'
-    case 'resolved':
-      return 'bg-gray-200 text-gray-600 border-transparent'
     default:
       return 'bg-primary/20 text-primary border-transparent'
   }
@@ -205,8 +378,6 @@ const getAlertTypeLabel = (type: AlertType) => {
       return 'Advertencia'
     case 'success':
       return 'Éxito'
-    case 'resolved':
-      return 'Resuelta'
     default:
       return 'Info'
   }
@@ -250,7 +421,7 @@ onMounted(() => {
     <!-- ========================================================================== -->
     <!-- TARJETAS DE RESUMEN -->
     <!-- ========================================================================== -->
-    <div v-if="!loading" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    <div v-if="!loading" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
       <!-- Alertas Críticas -->
       <Card>
         <CardContent class="pt-6">
@@ -295,21 +466,6 @@ onMounted(() => {
           </div>
         </CardContent>
       </Card>
-
-      <!-- Resueltas Hoy -->
-      <Card>
-        <CardContent class="pt-6">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm font-medium text-muted-foreground">Resueltas Hoy</p>
-              <p class="text-3xl font-bold text-gray-600 dark:text-gray-400 mt-1">{{ resolvedAlerts.length }}</p>
-            </div>
-            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-gray-500/10">
-              <CheckSquare class="h-6 w-6 text-gray-600 dark:text-gray-500" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
 
     <!-- ========================================================================== -->
@@ -332,12 +488,24 @@ onMounted(() => {
                   </Badge>
                 </div>
               </div>
-              <ChevronDown
-                :class="[
-                  'h-5 w-5 text-muted-foreground transition-transform duration-200',
-                  expandedGroups.critical ? 'rotate-180' : ''
-                ]"
-              />
+              <div class="flex items-center gap-2">
+                <Button
+                  v-if="criticalAlerts.length > 0"
+                  size="sm"
+                  variant="destructive"
+                  @click.stop="deleteAllByType('critical')"
+                  :disabled="deletingAllByType.has('critical')"
+                  class="mr-2"
+                >
+                  {{ deletingAllByType.has('critical') ? 'Borrando...' : 'Borrar todas' }}
+                </Button>
+                <ChevronDown
+                  :class="[
+                    'h-5 w-5 text-muted-foreground transition-transform duration-200',
+                    expandedGroups.critical ? 'rotate-180' : ''
+                  ]"
+                />
+              </div>
             </div>
           </CardHeader>
         </button>
@@ -367,6 +535,16 @@ onMounted(() => {
                 </div>
               </div>
             </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              @click="handleDeleteAlert(alert.id)"
+              :disabled="deletingAlerts.has(alert.id)"
+              class="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 self-center"
+              title="Eliminar alerta"
+            >
+              <Trash2 class="h-4 w-4" />
+            </Button>
           </div>
         </CardContent>
         <CardContent v-if="expandedGroups.critical && criticalAlerts.length === 0" class="text-center py-6 text-muted-foreground">
@@ -388,12 +566,24 @@ onMounted(() => {
                   </Badge>
                 </div>
               </div>
-              <ChevronDown
-                :class="[
-                  'h-5 w-5 text-muted-foreground transition-transform duration-200',
-                  expandedGroups.warning ? 'rotate-180' : ''
-                ]"
-              />
+              <div class="flex items-center gap-2">
+                <Button
+                  v-if="warningAlerts.length > 0"
+                  size="sm"
+                  variant="destructive"
+                  @click.stop="deleteAllByType('warning')"
+                  :disabled="deletingAllByType.has('warning')"
+                  class="mr-2"
+                >
+                  {{ deletingAllByType.has('warning') ? 'Borrando...' : 'Borrar todas' }}
+                </Button>
+                <ChevronDown
+                  :class="[
+                    'h-5 w-5 text-muted-foreground transition-transform duration-200',
+                    expandedGroups.warning ? 'rotate-180' : ''
+                  ]"
+                />
+              </div>
             </div>
           </CardHeader>
         </button>
@@ -423,6 +613,16 @@ onMounted(() => {
                 </div>
               </div>
             </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              @click="handleDeleteAlert(alert.id)"
+              :disabled="deletingAlerts.has(alert.id)"
+              class="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 self-center"
+              title="Eliminar alerta"
+            >
+              <Trash2 class="h-4 w-4" />
+            </Button>
           </div>
         </CardContent>
         <CardContent v-if="expandedGroups.warning && warningAlerts.length === 0" class="text-center py-6 text-muted-foreground">
@@ -444,12 +644,24 @@ onMounted(() => {
                   </Badge>
                 </div>
               </div>
-              <ChevronDown
-                :class="[
-                  'h-5 w-5 text-muted-foreground transition-transform duration-200',
-                  expandedGroups.success ? 'rotate-180' : ''
-                ]"
-              />
+              <div class="flex items-center gap-2">
+                <Button
+                  v-if="successAlerts.length > 0"
+                  size="sm"
+                  variant="destructive"
+                  @click.stop="deleteAllByType('success')"
+                  :disabled="deletingAllByType.has('success')"
+                  class="mr-2"
+                >
+                  {{ deletingAllByType.has('success') ? 'Borrando...' : 'Borrar todas' }}
+                </Button>
+                <ChevronDown
+                  :class="[
+                    'h-5 w-5 text-muted-foreground transition-transform duration-200',
+                    expandedGroups.success ? 'rotate-180' : ''
+                  ]"
+                />
+              </div>
             </div>
           </CardHeader>
         </button>
@@ -479,65 +691,19 @@ onMounted(() => {
                 </div>
               </div>
             </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              @click="handleDeleteAlert(alert.id)"
+              :disabled="deletingAlerts.has(alert.id)"
+              class="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 self-center"
+              title="Eliminar alerta"
+            >
+              <Trash2 class="h-4 w-4" />
+            </Button>
           </div>
         </CardContent>
         <CardContent v-if="expandedGroups.success && successAlerts.length === 0" class="text-center py-6 text-muted-foreground">
-          No hay alertas en esta categoría
-        </CardContent>
-      </Card>
-
-      <!-- GRUPO: Resueltas -->
-      <Card class="overflow-hidden">
-        <button @click="toggleGroup('resolved')" class="w-full">
-          <CardHeader class="py-4">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <CheckSquare class="h-5 w-5 text-gray-600" />
-                <div class="flex items-center gap-2">
-                  <h3 class="font-semibold text-foreground">Resueltas</h3>
-                  <Badge variant="outline" :class="getBadgeClass('resolved')">
-                    {{ resolvedAlerts.length }}
-                  </Badge>
-                </div>
-              </div>
-              <ChevronDown
-                :class="[
-                  'h-5 w-5 text-muted-foreground transition-transform duration-200',
-                  expandedGroups.resolved ? 'rotate-180' : ''
-                ]"
-              />
-            </div>
-          </CardHeader>
-        </button>
-        <CardContent v-if="expandedGroups.resolved && resolvedAlerts.length > 0" class="space-y-3 border-t pt-4">
-          <div
-            v-for="alert in resolvedAlerts"
-            :key="alert.id"
-            class="flex items-start justify-between p-3 rounded-lg bg-gray-500/10 hover:bg-accent/50 transition-colors"
-          >
-            <div class="flex items-start gap-3 flex-1">
-              <div class="mt-1">
-                <component :is="getAlertIcon(alert.type)" :class="getAlertIconClass(alert.type)" />
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 mb-1 flex-wrap">
-                  <p class="font-medium text-foreground">{{ alert.title }}</p>
-                  <Badge variant="outline" :class="getBadgeClass(alert.type)">
-                    {{ getAlertTypeLabel(alert.type) }}
-                  </Badge>
-                </div>
-                <p class="text-sm text-muted-foreground">{{ alert.description }}</p>
-                <div class="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap">
-                  <div class="flex items-center gap-1">
-                    <Clock class="h-3 w-3" />
-                    <span>{{ alert.time }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-        <CardContent v-if="expandedGroups.resolved && resolvedAlerts.length === 0" class="text-center py-6 text-muted-foreground">
           No hay alertas en esta categoría
         </CardContent>
       </Card>

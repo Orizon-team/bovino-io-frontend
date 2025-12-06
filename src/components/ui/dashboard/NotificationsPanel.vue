@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { AlertTriangle, CheckCircle2, Info, Clock } from 'lucide-vue-next'
+import { AlertTriangle, CheckCircle2, Clock } from 'lucide-vue-next'
 import Button from '@/components/ui/button/Button.vue'
 import { getEventsByUser, type EventFromAPI } from '@/services/Alerts'
 
 const router = useRouter()
 
 
-type NotificationType = 'alert' | 'success' | 'info'
+type NotificationType = 'alert' | 'success' | 'warning'
 
 interface Notification {
   id: string
@@ -33,7 +33,7 @@ const mapEventTypeToNotificationType = (eventType: string): NotificationType => 
     return 'success'
   }
   
-  return 'info'
+  return 'warning'
 }
 
 const formatEventTime = (fecha: string, hora: string): string => {
@@ -101,7 +101,16 @@ const notifications = computed<Notification[]>(() => {
 })
 
 const getNotificationClass = (type: NotificationType) => {
-  return type === 'alert' ? 'bg-destructive/5' : ''
+  switch (type) {
+    case 'alert':
+      return 'bg-destructive/10'
+    case 'warning':
+      return 'bg-amber-500/10'
+    case 'success':
+      return 'bg-green-500/10'
+    default:
+      return ''
+  }
 }
 
 const getIconColor = (type: NotificationType) => {
@@ -110,8 +119,8 @@ const getIconColor = (type: NotificationType) => {
       return 'text-destructive'
     case 'success':
       return 'text-green-600'
-    case 'info':
-      return 'text-blue-600'
+    case 'warning':
+      return 'text-amber-600 dark:text-amber-400'
   }
 }
 
@@ -136,9 +145,6 @@ onMounted(() => {
           </span>
         </p>
       </div>
-      <Button variant="ghost" size="sm" class="text-xs">
-        Marcar todas como leídas
-      </Button>
     </div>
 
     <div class="w-full border-t border-border"></div>
@@ -177,7 +183,7 @@ onMounted(() => {
                 v-else-if="notification.type === 'success'"
                 :class="['h-5 w-5', getIconColor(notification.type)]"
               />
-              <Info 
+              <Clock 
                 v-else
                 :class="['h-5 w-5', getIconColor(notification.type)]"
               />

@@ -28,6 +28,18 @@ type EventsResponse = {
   }
 }
 
+type DeleteEventResponse = {
+  data: {
+    deleteEvento: boolean
+  }
+}
+
+type DeleteEventsByTypeResponse = {
+  data: {
+    deleteEventosByUserAndType: boolean
+  }
+}
+
 export const getEventsByUser = async (userId: number): Promise<EventFromAPI[]> => {
   const query = `
     query ($id: Int!) {
@@ -71,4 +83,70 @@ export const getEventsByUser = async (userId: number): Promise<EventFromAPI[]> =
 
   const result: EventsResponse = await response.json()
   return result.data.eventosByUser
+}
+
+
+export const deleteEvent = async (eventId: number): Promise<boolean> => {
+  const query = `
+    mutation DeleteEvento($id: Int!) {
+      deleteEvento(id: $id)
+    }
+  `
+
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query,
+      variables: { id: eventId },
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Error al eliminar el evento')
+  }
+
+  const result: DeleteEventResponse = await response.json()
+  
+  if ('errors' in result) {
+    throw new Error('Error en la mutación de eliminación')
+  }
+
+  return result.data.deleteEvento
+}
+
+export const deleteEventsByUserAndType = async (userId: number, eventType: string): Promise<boolean> => {
+  const query = `
+    mutation ($id_user: Int!, $type: String!) {
+      deleteEventosByUserAndType(id_user: $id_user, event_type: $type)
+    }
+  `
+
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query,
+      variables: { 
+        id_user: userId, 
+        type: eventType 
+      },
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Error al eliminar eventos por tipo')
+  }
+
+  const result: DeleteEventsByTypeResponse = await response.json()
+  
+  if ('errors' in result) {
+    throw new Error('Error en la mutación de eliminación por tipo')
+  }
+
+  return result.data.deleteEventosByUserAndType
 }
