@@ -80,7 +80,7 @@ const handleSettings = () => {
         <RouterLink to="/dashboard" class="flex items-center gap-2 justify-start">
           <div class="flex h-12 items-center justify-center">
             <img
-              src="/public/logo.svg"
+              src='/logo.svg?url'
               alt="Logotipo de Bovino-io"
               class="h-full w-auto object-contain"
             />

@@ -12,13 +12,13 @@ const currentYear = computed<number>(() => {
 
 <template>
   <footer id="footer" class=" bg-white text-gray-500">
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12"> 
       <div class="grid grid-cols-1 gap-8 md:grid-cols-4">
         <div class="space-y-4 ">
           <RouterLink to="/" class="flex items-center gap-2">
             <div class="flex h-14 items-center justify-center">
               <img
-                src="/public/logo.svg"
+                src='/logo.svg?url'
                 alt="Logotipo de Bovino-io"
                 class="h-full w-auto object-contain"
               />

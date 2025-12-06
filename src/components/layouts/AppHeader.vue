@@ -16,7 +16,7 @@ const scrollToSection = (sectionId: string) => {
         <RouterLink to="/" class="flex items-center gap-2 justify-start">
           <div class="flex h-14 items-center justify-center">
             <img
-              src="/public/logo.svg"
+              src='/logo.svg?url'
               alt="Logotipo de Bovino-io"
               class="h-full w-auto object-contain"
             />
