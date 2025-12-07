@@ -202,7 +202,7 @@ import { MapPin, Bell, Radio, BarChart3, Shield, Zap } from 'lucide-vue-next'
             </div>
             <div class="relative">
               <img
-                src="/images/beacon-technology-diagram-with-cattle.jpg"
+                src="/images/beacon-technology-diagram-with-cattle.png"
                 alt="Tecnología BLE"
                 class="w-full rounded-lg border border-border"
               />
