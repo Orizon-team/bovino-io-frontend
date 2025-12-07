@@ -12,11 +12,12 @@ import { MapPin, Bell, Radio, BarChart3, Shield, Zap } from 'lucide-vue-next'
         <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16 sm:py-24 md:py-32">
           <div class="mx-auto max-w-3xl text-center">
             <h1 class="text-4xl sm:text-6xl font-bold tracking-tight text-foreground leading-tight">
-              Monitoreo Inteligente de Ganado con Tecnología BLE
+              Monitoreo Inteligente de Ganado con Inteligencia Artificial
             </h1>
             <p class="mt-6 text-xl leading-relaxed text-muted-foreground">
-              Mantén tu ganadería bajo control con nuestro sistema de monitoreo en tiempo real mediante beacons BLE.
-              Localiza tus animales, recibe alertas y optimiza la gestión de tu rancho.
+              Mantén tu ganadería bajo control con nuestro sistema de monitoreo en tiempo real mediante beacons BLE e Inteligencia Artificial.
+              Localiza a tus animales y recibe alertas sobre su comportamiento, alimentación y posibles enfermedades. 
+              Optimiza la gestión de tu rancho con información precisa en tiempo real.
             </p>
 
             <div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -28,7 +29,7 @@ import { MapPin, Bell, Radio, BarChart3, Shield, Zap } from 'lucide-vue-next'
         </div>
       </section>
 
-      <section>
+      <!-- <section>
         <div class="relative w-full">
           <div class="absolute inset-0 bg-linear-to-t from-background via-transparent to-transparent z-10" />
           <img
@@ -37,7 +38,7 @@ import { MapPin, Bell, Radio, BarChart3, Shield, Zap } from 'lucide-vue-next'
             class="w-full h-auto object-cover"
           />
         </div>
-      </section>
+      </section> -->
 
       <section id="features" class="py-16 sm:py-24 bg-background">
         <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
