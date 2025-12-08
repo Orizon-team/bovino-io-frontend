@@ -9,7 +9,8 @@ export default defineConfig({
     host: true,
     allowedHosts: [
       'voobcp-ip-209-178-128-69.tunnelmole.net',
-      '.tunnelmole.net'
+      '.tunnelmole.net',
+      'bovino-io-frontend-tya4.onrender.com'
     ]
   },
   plugins: [
