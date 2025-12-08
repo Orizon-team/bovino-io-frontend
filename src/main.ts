@@ -4,19 +4,32 @@ import App from './App.vue'
 import router from './routes' 
 
 import { registerSW } from 'virtual:pwa-register'
-
+import { subscribeToPush } from './services/pushNotifications'
 import Toast from 'vue-toastification'
 import 'vue-toastification/dist/index.css'
 
-const updateSW = registerSW({
+registerSW({
   onNeedRefresh() {
-    console.log('✅ Nueva versión disponible. Recarga para actualizar.')
+    console.log('Nueva versión disponible. Recarga para actualizar.')
   },
   onOfflineReady() {
-    console.log('✅ App lista para funcionar offline.')
+    console.log('App lista para funcionar offline.')
   },
   onRegistered(registration) {
-    console.log('✅ Service Worker registrado:', registration)
+    console.log('Service Worker registrado:', registration)
+    console.log('Iniciando proceso de suscripción push...')
+    
+    navigator.serviceWorker.ready
+      .then((reg) => {
+        console.log('SW ready, llamando a subscribeToPush...')
+        return subscribeToPush(reg)
+      })
+      .then(() => {
+        console.log('subscribeToPush completado exitosamente')
+      })
+      .catch((err) => {
+        console.error('Error en el proceso de suscripción:', err)
+      })
   }
 })
 
@@ -36,4 +49,4 @@ app.use(Toast, {
   rtl: false,
 })
 
-createApp(App).use(router).mount('#app')
+app.use(router).mount('#app')

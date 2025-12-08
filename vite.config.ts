@@ -19,6 +19,10 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'robots.txt', 'offline.html'],
       
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+
       // ✅ Habilitar PWA en desarrollo
       devOptions: {
         enabled: true,
