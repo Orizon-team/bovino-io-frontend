@@ -62,6 +62,7 @@ type Cattle = {
 	tag: string
 	image?: string | null
 	zone: string | null
+	deviceLocation: string | null  // Ubicación del dispositivo que detecta al tag
 	lastSeen: string
 	status?: string
 	battery_level?: number
@@ -249,6 +250,41 @@ const inferZoneFromLocation = (locStr: string | null, tagPayload?: any): string 
 	return locStr
 }
 
+// Buscar la ubicación del dispositivo asociado al tag basándose en la zona
+const findDeviceLocation = (zoneName: string | null, tagPayload?: any): string | null => {
+	if (!zoneName) return null
+	
+	// Buscar en el cache de dispositivos por zona
+	for (const z of availableZones.value) {
+		const devs = devicesByZone.value[String(z.id)] || []
+		
+		// Si el nombre de la zona coincide
+		if (String(z.name).toLowerCase() === String(zoneName).toLowerCase()) {
+			// Buscar dispositivo por MAC si está disponible
+			if (tagPayload?.mac_address) {
+				const matchingDev = devs.find((d: any) => 
+					d.mac_address && String(d.mac_address).toLowerCase() === String(tagPayload.mac_address).toLowerCase()
+				)
+				if (matchingDev?.location) return matchingDev.location
+			}
+			// Si hay dispositivos en la zona, devolver la ubicación del primero
+			if (devs.length > 0 && devs[0]?.location) {
+				return devs[0].location
+			}
+		}
+		
+		// También buscar si el current_location coincide con alguna ubicación de dispositivo
+		for (const d of devs) {
+			const devLocation = (d.location || '').toString().toLowerCase()
+			if (devLocation && devLocation === String(zoneName).toLowerCase()) {
+				return d.location
+			}
+		}
+	}
+	
+	return null
+}
+
 // Mapear Cow de la API a Cattle del componente
 const mapCowToCattle = (cow: Cow): Cattle => {
 	console.log('%c🐄 DATOS DEL BACKEND', 'background: #222; color: #bada55; font-size: 16px; font-weight: bold; padding: 4px;')
@@ -285,6 +321,13 @@ const mapCowToCattle = (cow: Cow): Cattle => {
 		zone: (typeof cow.tag?.current_location === 'string'
 			? cow.tag?.current_location
 			: (cow.tag?.current_location as any)?.name) ,
+		// Buscar la ubicación del dispositivo asociado al tag
+		deviceLocation: findDeviceLocation(
+			typeof cow.tag?.current_location === 'string'
+				? cow.tag?.current_location
+				: (cow.tag?.current_location as any)?.name,
+			cow.tag
+		),
 		lastSeen: formatLastSeen(cow.tag?.last_transmission),
 		status: cow.tag?.status || 'unknown',
 		battery_level: cow.tag?.battery_level,
@@ -441,15 +484,14 @@ const initWebSocket = () => {
 			console.log('🔄 onCowStatus (Mi_ganado):', cow)
 			try {
 				if (selectedCattle.value && String(selectedCattle.value.id) === String(cow.id)) {
+					const rawLoc = (cow as any).tag?.current_location
+					const normalizedLoc = normalizeLocation(rawLoc)
+					const inferredZone = inferZoneFromLocation(normalizedLoc, (cow as any).tag)
 					const updated: Partial<Cattle> = {
 						tag: (cow as any).name ?? selectedCattle.value.tag,
 						image: (cow as any).image ?? selectedCattle.value.image ?? null,
-						zone: (() => {
-							const rawLoc = (cow as any).tag?.current_location
-							const normalizedLoc = normalizeLocation(rawLoc)
-							const inferred = inferZoneFromLocation(normalizedLoc, (cow as any).tag)
-							return inferred ?? selectedCattle.value.zone ?? null
-						})(),
+						zone: inferredZone ?? selectedCattle.value.zone ?? null,
+						deviceLocation: findDeviceLocation(inferredZone, (cow as any).tag) ?? selectedCattle.value.deviceLocation ?? null,
 						lastSeen: (() => {
 							const lt = (cow as any).tag?.last_transmission
 							if (!lt) return selectedCattle.value.lastSeen
@@ -503,6 +545,7 @@ const initWebSocket = () => {
 						const rawLoc = tag?.current_location
 						const normalizedLoc = normalizeLocation(rawLoc)
 						const zone = inferZoneFromLocation(normalizedLoc, tag)
+						const deviceLocation = findDeviceLocation(zone, tag)
 				const formatLastSeen = (lastTransmission?: string): string => {
 					if (!lastTransmission) return 'Sin señal'
 					try {
@@ -524,6 +567,7 @@ const initWebSocket = () => {
 							return {
 								...c,
 								zone,
+								deviceLocation,
 								status: tag?.status ?? c.status,
 								battery_level: typeof tag?.battery_level === 'number' ? tag.battery_level : c.battery_level,
 								lastSeen: formatLastSeen(tag?.last_transmission)
@@ -535,6 +579,7 @@ const initWebSocket = () => {
 						selectedCattle.value = {
 							...selectedCattle.value,
 							zone,
+							deviceLocation,
 							status: tag?.status ?? selectedCattle.value.status,
 							battery_level: typeof tag?.battery_level === 'number' ? tag.battery_level : selectedCattle.value.battery_level,
 							lastSeen: formatLastSeen(tag?.last_transmission)
@@ -1271,7 +1316,7 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 						<div class="flex items-center gap-2 text-sm text-muted-foreground mt-2">
 							<template v-if="cattle.zone">
 								<MapPin class="h-3 w-3 text-primary" />
-								<Badge class="bg-emerald-100 text-emerald-700 px-2 py-1">{{ cattle.zone }}</Badge>
+								<Badge class="bg-emerald-100 text-emerald-700 px-2 py-1">{{ cattle.deviceLocation || cattle.zone }}</Badge>
 							</template>
 							<template v-else>
 								<span class="text-destructive font-medium">Sin señal</span>
@@ -1307,7 +1352,7 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 						<template v-if="cattle.zone">
 							<div class="flex items-center gap-1">
 								<MapPin class="h-4 w-4 text-primary" />
-								<span>{{ cattle.zone }}</span>
+								<span>{{ cattle.deviceLocation || cattle.zone }}</span>
 							</div>
 							<span>•</span>
 							<span>{{ cattle.lastSeen }}</span>
@@ -1367,10 +1412,10 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 																</div>
 									<div class="mt-3 md:mt-0 flex flex-col gap-2">
 								<div class="flex items-center gap-2">
-									<span class="text-sm text-muted-foreground">Ubicación Actual:</span>
+									<span class="text-sm text-muted-foreground">Dispositivo:</span>
 									<div class="flex items-center gap-2">
 											<MapPin class="h-4 w-4 text-primary" />
-											<Badge v-if="selectedCattle?.zone" class="bg-emerald-100 text-emerald-700 px-2 py-1">{{ selectedCattle.zone }}</Badge>
+											<Badge v-if="selectedCattle?.zone" class="bg-emerald-100 text-emerald-700 px-2 py-1">{{ selectedCattle.deviceLocation || selectedCattle.zone }}</Badge>
 											<Badge v-else variant="destructive" class="px-2 py-1">Sin ubicación</Badge>
 									</div>
 								</div>										<div class="flex items-center gap-2">
