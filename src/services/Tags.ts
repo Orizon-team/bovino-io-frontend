@@ -2,28 +2,30 @@ const API_URL = 'https://bovino-io-backend.onrender.com/graphql'
 
 export type Tag = {
   id: number
-  id_tag: string
   mac_address: string
   battery_level: number
   status: string
-  current_location: string
+  current_location: string | null
   last_transmission?: string
 }
 
+// Schema backend espera TagLocationInput para current_location
+export type TagLocationInput = { name: string }
+
 export type CreateTagInput = {
-  id_tag: string
+  id: string
   mac_address: string
   battery_level: number
   status: string
   last_transmission: string
-  current_location: string
+  current_location?: TagLocationInput | null
 }
 
 export type UpdateTagInput = {
   mac_address?: string
   battery_level?: number
   status?: string
-  current_location?: string | null
+  current_location?: TagLocationInput | null
   last_transmission?: string
 }
 
@@ -33,7 +35,6 @@ export async function createTag(input: CreateTagInput): Promise<Tag> {
     mutation CreateTag($input: CreateTagInput!) {
       createTag(input: $input) {
         id
-        id_tag
         mac_address
         battery_level
         status
@@ -43,7 +44,13 @@ export async function createTag(input: CreateTagInput): Promise<Tag> {
     }
   `
 
-  const variables = { input }
+  // Adaptar current_location: permitir string legacy -> convertir a objeto o null
+  const normalizedInput: any = { ...input }
+  if (typeof (normalizedInput.current_location) === 'string') {
+    const s = normalizedInput.current_location.trim()
+    normalizedInput.current_location = s ? { name: s } : null
+  }
+  const variables = { input: normalizedInput }
 
   const response = await fetch(API_URL, {
     method: 'POST',
@@ -74,7 +81,6 @@ export async function listTags(): Promise<Tag[]> {
     query {
       tags {
         id
-        id_tag
         mac_address
         battery_level
         status
@@ -106,7 +112,6 @@ export async function getTagById(id: number): Promise<Tag> {
     query($id: Int!) {
       tag(id: $id) {
         id
-        id_tag
         mac_address
         battery_level
         status
@@ -140,7 +145,6 @@ export async function updateTag(id: number, input: UpdateTagInput): Promise<Tag>
     mutation UpdateTag($id: Int!, $input: UpdateTagInput!) {
       updateTag(id: $id, input: $input) {
         id
-        id_tag
         mac_address
         battery_level
         status
@@ -149,7 +153,13 @@ export async function updateTag(id: number, input: UpdateTagInput): Promise<Tag>
     }
   `
 
-  const variables = { id, input }
+  // Normalizar current_location similar a createTag
+  const normalizedInput: any = { ...input }
+  if (typeof (normalizedInput.current_location) === 'string') {
+    const s = normalizedInput.current_location.trim()
+    normalizedInput.current_location = s ? { name: s } : null
+  }
+  const variables = { id, input: normalizedInput }
 
   // LOG: mostrar el payload que se envía al backend para facilitar debugging
   try {

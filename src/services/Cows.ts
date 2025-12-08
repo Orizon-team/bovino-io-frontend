@@ -6,10 +6,10 @@ export type Cow = {
   name: string
   image?: string
   favorite_food?: string
+  description?: string
   ear_tag?: string
   tag?: {
     id: number
-    id_tag: string
     current_location?: string
     status?: string
     last_transmission?: string
@@ -26,6 +26,7 @@ export type CreateVacaInput = {
   id?: number
   nombre: string
   comida_preferida: string
+  descripcion?: string
   id_usuario: number
   tag_id: number
   ear_tag?: string
@@ -34,6 +35,8 @@ export type CreateVacaInput = {
 export type UpdateVacaInput = {
   nombre?: string
   comida_preferida?: string
+  descripcion?: string
+  ear_tag?: string
   tag_id?: number
 }
 
@@ -46,10 +49,10 @@ export async function createVaca(input: CreateVacaInput): Promise<Cow> {
         name
         image
         favorite_food
+        description
         ear_tag
         tag {
           id
-          id_tag
           current_location
         }
         user {
@@ -98,6 +101,7 @@ export async function createCowWithImage(
   name: string,
   id_user: number,
   favorite_food: string,
+  descripcion: string | undefined,
   imagen: File,
   earTag?: string
 ): Promise<Cow> {
@@ -106,6 +110,10 @@ export async function createCowWithImage(
   formData.append('name', name)
   formData.append('id_user', id_user.toString())
   formData.append('favorite_food', favorite_food)
+  if (descripcion !== undefined) {
+    formData.append('description', descripcion)
+    formData.append('descripcion', descripcion)
+  }
   formData.append('imagen', imagen)
   
   console.log('%c📤 CREATECOWWITHIMAGE - Enviando al backend:', 'background: #9C27B0; color: white; font-weight: bold; padding: 4px;')
@@ -144,10 +152,11 @@ export async function listVacas(): Promise<Cow[]> {
         id
         name
         image
+        favorite_food
+        description
         ear_tag
         tag {
           id
-          id_tag
           current_location
           status
           last_transmission
@@ -187,10 +196,10 @@ export async function getVacaById(id: number): Promise<Cow> {
         name
         image
         favorite_food
+        description
         ear_tag
         tag {
           id
-          id_tag
           current_location
         }
         user {
@@ -229,10 +238,10 @@ export async function updateVaca(id: number, input: UpdateVacaInput): Promise<Co
         name
         image
         favorite_food
+        description
         ear_tag
         tag {
           id
-          id_tag
           current_location
         }
       }
@@ -266,10 +275,11 @@ export async function getVacasByUser(userId: number): Promise<Cow[]> {
         id
         name
         image
+        favorite_food
+        description
         ear_tag
         tag {
           id
-          id_tag
           current_location
           status
           last_transmission
@@ -284,6 +294,11 @@ export async function getVacasByUser(userId: number): Promise<Cow[]> {
   `
 
   const variables = { userId }
+  // DEBUG: registrar la query y variables enviadas al backend para diagnosticar campos solicitados
+  try {
+    console.log('getVacasByUser - enviando query:', query)
+    console.log('getVacasByUser - variables:', JSON.stringify(variables))
+  } catch {}
 
   const response = await fetch(API_URL, {
     method: 'POST',
@@ -294,12 +309,23 @@ export async function getVacasByUser(userId: number): Promise<Cow[]> {
   })
 
   const result = await response.json()
+  // Log completo de la respuesta para diagnóstico (temporal)
+  try { console.log('getVacasByUser - respuesta GraphQL:', JSON.stringify(result, null, 2)) } catch {}
 
+  // Si hubo errores, lanzarlos para que la UI o la consola los muestre.
   if (result.errors) {
-    throw new Error(result.errors[0]?.message || 'Error al obtener las vacas del usuario')
+    console.error('getVacasByUser - GraphQL errors:', result.errors)
+    const firstMessage = result.errors[0]?.message ?? 'Error al obtener las vacas del usuario'
+    throw new Error(firstMessage)
   }
 
-  return result.data.vacasByUser
+  // Manejo flexible: si el backend devolvió `vacasByUser` úsalo, si no, intenta `vacas` (posible cambio de esquema)
+  if (result?.data?.vacasByUser) return result.data.vacasByUser
+  if (result?.data?.vacas) return result.data.vacas
+
+  // Si no hay datos, devolver arreglo vacío pero loguear la situación
+  console.warn('getVacasByUser: la respuesta GraphQL no contiene `vacasByUser` ni `vacas`. Devolviendo arreglo vacío.')
+  return []
 }
 
 // Eliminar una vaca

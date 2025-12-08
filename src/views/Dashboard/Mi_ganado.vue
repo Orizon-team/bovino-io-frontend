@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, reactive } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, reactive, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUser } from '@/composables/useUser'
 import { wsClient } from '@/services/WebSockets'
 import { listVacas, getVacasByUser, getVacaById, createVaca, createCowWithImage, updateVaca, deleteVaca, type Cow } from '@/services/Cows'
 import { getZonesByUser, type Zone } from '@/services/Zones'
+import { getDevicesByZone } from '@/services/Devices'
 import { updateTag, createTag } from '@/services/Tags'
 import {
 	Search,
-	Plus,
+	Plus, 
+	Camera,
 	Filter,
 	LayoutGrid,
 	List,
@@ -22,6 +24,7 @@ import {
 
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+//import TagDetectedPrompt from '@/components/TagDetectedPrompt.vue'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -77,14 +80,72 @@ const zoneFilter = ref<string>('all')
 const viewMode = ref<'grid' | 'list'>('grid')
 const cattleList = ref<Cattle[]>([])
 const availableZones = ref<Zone[]>([])
+// Cache de dispositivos por zona (clave: id de zona como string)
+const devicesByZone = ref<Record<string, any[]>>({})
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 const selectedCattle = ref<Cattle | null>(null)
+// Estado de conexión WebSocket (seguir patrón de Zones)
+const wsConnected = ref(false)
 
 const detailModalOpen = ref(false)
 const addDialogOpen = ref(false)
 const editDialogOpen = ref(false)
 const deleteDialogOpen = ref(false)
+
+// Estado para mostrar el componente TagDetectada (toast) y el nuevo prompt modal
+const detectedTag = ref<null | { mensaje?: string; tagId?: string | number; nivel?: 'info' | 'success' | 'warning' | 'error' }>(null)
+const showDetectedTag = ref(false)
+let detectedTimeout: ReturnType<typeof setTimeout> | null = null
+
+// Nuevo prompt modal que solicita aceptar/cancelar el registro
+const detectedPromptOpen = ref(false)
+const detectedPromptPayload = ref<any>(null)
+
+const onDetectedClose = () => {
+	showDetectedTag.value = false
+	detectedTag.value = null
+	if (detectedTimeout) {
+		clearTimeout(detectedTimeout)
+		detectedTimeout = null
+	}
+}
+
+const onPromptAccept = (payload: any) => {
+	try {
+		// Emitir respuesta al backend indicando que el usuario aceptó
+		try { wsClient.emit('cow.registration.response', { tag_id: payload?.tag_id ?? payload?.id ?? null, accepted: true }) } catch (e) { console.warn('No se pudo emitir respuesta WS aceptada', e) }
+
+		// Prefill add dialog con la info del payload (misma lógica previa)
+		if (payload) {
+			if (payload.ear_tag) {
+				tempAdd.customId = String(payload.ear_tag)
+			}
+			tempAdd.beacons = []
+			if (payload.tag_id) tempAdd.beacons.push(String(payload.tag_id))
+			if (payload.mac_address) tempAdd.notes = `MAC: ${payload.mac_address}`
+			if (payload.zone) tempAdd.zone = payload.zone
+			addDialogOpen.value = true
+		}
+
+	} catch (err) {
+		console.error('Error al aceptar prompt de registro:', err)
+	} finally {
+		detectedPromptOpen.value = false
+		detectedPromptPayload.value = null
+	}
+}
+
+const onPromptCancel = (payload?: any) => {
+	try {
+		try { wsClient.emit('cow.registration.response', { tag_id: payload?.tag_id ?? payload?.id ?? null, accepted: false }) } catch (e) { console.warn('No se pudo emitir respuesta WS cancelada', e) }
+	} catch (err) {
+		console.error('Error al cancelar prompt de registro:', err)
+	} finally {
+		detectedPromptOpen.value = false
+		detectedPromptPayload.value = null
+	}
+}
 
 const cattleToEdit = ref<Cattle | null>(null)
 const cattleToDelete = ref<Cattle | null>(null)
@@ -110,7 +171,7 @@ const validateImageUrl = (url?: string) => {
 	return /^\/|^https?:\/\/|^blob:|^data:/.test(url)
 }
 
-// Generar un id_tag válido para el backend: cadena numérica (10-12 dígitos)
+// Generar un id válido para el backend: cadena numérica (10-12 dígitos)
 const generateNumericTagId = (): string => {
 	// usar timestamp + 3 dígitos aleatorios para minimizar colisiones
 	const timestampPart = (Date.now() % 10000000000).toString().padStart(10, '0')
@@ -135,6 +196,57 @@ const canAdd = computed(() => {
 const canSaveEdit = computed(() => {
 	return editTemp.id !== 0 && editTemp.tag.trim().length > 0 && validateImageUrl(editTemp.image) && !isDuplicateTag(editTemp.tag, editTemp.id)
 })
+
+// Normaliza distintos formatos de current_location a string legible o null
+const normalizeLocation = (loc: any): string | null => {
+	if (!loc && loc !== 0) return null
+	try {
+		if (typeof loc === 'string') {
+			const s = loc.trim()
+			return s === '' ? null : s
+		}
+		if (typeof loc === 'object') {
+			// Backend puede enviar { name } o { name, part, subzone }
+			const name = loc.name || loc.zone || loc.location || ''
+			const part = loc.part || loc.subzone || loc.section || loc.area || ''
+			const joined = (name || '') + (part ? ` — ${part}` : '')
+			const s = joined.trim()
+			return s === '' ? null : s
+		}
+		return String(loc)
+	} catch (e) {
+		return null
+	}
+}
+
+// Intentar inferir la zona humana (zone.name) a partir de current_location normalizado
+const inferZoneFromLocation = (locStr: string | null, tagPayload?: any): string | null => {
+	if (!locStr) return null
+	// 1) Coincidencia directa con nombre de zona
+	const zoneMatch = availableZones.value.find(z => String(z.name).toLowerCase() === String(locStr).toLowerCase())
+	if (zoneMatch) return zoneMatch.name
+
+	// 2) Buscar en cache de dispositivos por zona (comparar location y mac_address)
+	for (const z of availableZones.value) {
+		const devs = devicesByZone.value[String(z.id)] || []
+		for (const d of devs) {
+			try {
+				const devLocation = (d.location || d.ubicacion || d.name || '').toString().toLowerCase()
+				const locLower = locStr.toLowerCase()
+				if (devLocation && devLocation === locLower) return z.name
+				// A veces el current_location puede ser el nombre del dispositivo parcial
+				if (devLocation && devLocation.includes(locLower)) return z.name
+				// Intentar emparejar por MAC si tagPayload incluye mac_address
+				if (tagPayload && tagPayload.mac_address && d.mac_address && String(tagPayload.mac_address).toLowerCase() === String(d.mac_address).toLowerCase()) return z.name
+			} catch (e) {
+				// ignore
+			}
+		}
+	}
+
+	// 3) No se pudo inferir -> devolver el string original (puede ser útil) o null
+	return locStr
+}
 
 // Mapear Cow de la API a Cattle del componente
 const mapCowToCattle = (cow: Cow): Cattle => {
@@ -168,11 +280,14 @@ const mapCowToCattle = (cow: Cow): Cattle => {
 		id: cow.id,
 		tag: cow.name,
 		image: cow.image || null,
-		zone: cow.tag?.current_location || null,
+		// current_location puede venir como string o como objeto { name }
+		zone: (typeof cow.tag?.current_location === 'string'
+			? cow.tag?.current_location
+			: (cow.tag?.current_location as any)?.name) ,
 		lastSeen: formatLastSeen(cow.tag?.last_transmission),
 		status: cow.tag?.status || 'unknown',
 		battery_level: cow.tag?.battery_level,
-		notes: cow.favorite_food ? `Comida favorita: ${cow.favorite_food}` : '',
+		notes: (cow as any).description ?? (cow as any).descripcion ?? (cow as any).notes ?? '',
 		beacons: cow.tag?.id ? [String(cow.tag.id)] : [],
 		ear_tag: cow.ear_tag,
 		favorite_food: cow.favorite_food,
@@ -188,7 +303,16 @@ const loadCattle = async () => {
 		let cows: Cow[]
 		// Si hay un userId válido, cargar solo sus vacas
 		if (userId.value && userId.value > 0) {
-			cows = await getVacasByUser(userId.value)
+			try {
+				cows = await getVacasByUser(userId.value)
+			} catch (e) {
+				console.warn('getVacasByUser falló, intentando cargar todas las vacas como fallback:', e)
+				// Intentar cargar todas las vacas si la consulta por usuario falla
+				cows = await listVacas()
+				// notificar al usuario que se usó un fallback
+				error.value = 'No se pudieron cargar las vacas del usuario; mostrando todas las vacas como respaldo.'
+				setTimeout(() => { error.value = null }, 6000)
+			}
 		} else {
 			// Si no hay usuario, cargar todas las vacas
 			cows = await listVacas()
@@ -230,9 +354,196 @@ const loadZones = async () => {
 	try {
 		const zones = await getZonesByUser(userId.value)
 		availableZones.value = zones
+
+		// Cargar y cachear dispositivos por zona (para poder inferir zone desde device name/mac)
+		try {
+			await Promise.all(
+				availableZones.value.map(async (z) => {
+					try {
+						const devs = await getDevicesByZone(Number((z as any).id))
+						devicesByZone.value[String((z as any).id)] = devs || []
+					} catch (e) {
+						console.warn('No se pudieron cargar dispositivos para zona', (z as any).id, e)
+						devicesByZone.value[String((z as any).id)] = []
+					}
+				})
+			)
+		} catch (e) {
+			console.warn('Error al cachear dispositivos por zona:', e)
+		}
 	} catch (err) {
 		console.error('Error al cargar zonas:', err)
 	}
+}
+
+/**
+ * Inicializa la conexión WebSocket y registra los handlers específicos para Mi_ganado
+ * Separado en función para seguir el patrón usado en `Zones.vue`.
+ */
+const initWebSocket = () => {
+	wsClient.connect({
+		onConnect: (socketId) => {
+			console.log('✅ WebSocket conectado (Mi_ganado):', socketId)
+			wsConnected.value = true
+			if (userId.value && userId.value > 0) {
+				wsClient.userSubscribe(userId.value)
+			} else {
+				console.warn('No hay userId disponible para user.subscribe')
+			}
+		},
+		onDisconnect: () => {
+			console.log('❌ WebSocket desconectado (Mi_ganado)')
+			wsConnected.value = false
+		},
+		onError: (err) => {
+			console.error('Error WebSocket (Mi_ganado):', err)
+			wsConnected.value = false
+		},
+		// Mantener los handlers existentes para registro/actualización de vacas y tags
+		onCowRegistrationRequest: (payload) => {
+			console.log('📨 cow.registration.request (Mi_ganado):', payload)
+			try {
+				if (payload) {
+					detectedPromptPayload.value = payload
+					detectedPromptOpen.value = true
+					if (payload.redirect_url) {
+						try { window.location.href = payload.redirect_url } catch (navErr) { console.warn('No se pudo navegar a redirect_url:', navErr) }
+					}
+				}
+			} catch (err) { console.error('Error al manejar cow.registration.request:', err) }
+		},
+		onCowRegistrationTimeout: (payload) => {
+			console.log('⏱️ cow.registration.timeout (Mi_ganado):', payload)
+			addDialogOpen.value = false
+			error.value = 'El registro del tag venció. Intenta nuevamente.'
+			setTimeout(() => { error.value = null }, 5000)
+		},
+		onCowRegistrationError: (payload) => {
+			console.log('❌ cow.registration.error (Mi_ganado):', payload)
+			addDialogOpen.value = false
+			error.value = payload?.message || 'Error durante el registro del tag'
+			setTimeout(() => { error.value = null }, 5000)
+		},
+		onCowStatus: (cow) => {
+			console.log('🔄 onCowStatus (Mi_ganado):', cow)
+			try {
+				if (selectedCattle.value && String(selectedCattle.value.id) === String(cow.id)) {
+					const updated: Partial<Cattle> = {
+						tag: (cow as any).name ?? selectedCattle.value.tag,
+						image: (cow as any).image ?? selectedCattle.value.image ?? null,
+						zone: (() => {
+							const rawLoc = (cow as any).tag?.current_location
+							const normalizedLoc = normalizeLocation(rawLoc)
+							const inferred = inferZoneFromLocation(normalizedLoc, (cow as any).tag)
+							return inferred ?? selectedCattle.value.zone ?? null
+						})(),
+						lastSeen: (() => {
+							const lt = (cow as any).tag?.last_transmission
+							if (!lt) return selectedCattle.value.lastSeen
+							try {
+								const date = new Date(lt)
+								const now = new Date()
+								const diffMs = now.getTime() - date.getTime()
+								const diffMins = Math.floor(diffMs / 60000)
+								if (diffMins < 1) return 'Hace unos momentos'
+								if (diffMins < 60) return `Hace ${diffMins} minutos`
+								const diffHours = Math.floor(diffMins / 60)
+								if (diffHours < 24) return `Hace ${diffHours} horas`
+								const diffDays = Math.floor(diffHours / 24)
+								return `Hace ${diffDays} días`
+							} catch { return selectedCattle.value.lastSeen }
+						})(),
+						status: (cow as any).tag?.status ?? selectedCattle.value.status,
+						battery_level: (cow as any).tag?.battery_level ?? selectedCattle.value.battery_level,
+						notes: (() => {
+							const desc = (cow as any).description ?? (cow as any).descripcion
+							if (typeof desc === 'string' && desc.trim() !== '') return desc
+							return selectedCattle.value.notes
+						})(),
+						beacons: (() => {
+							const id = (cow as any).tag?.id
+							if (!id) return selectedCattle.value.beacons
+							return [String(id)]
+						})(),
+						tag_id: (cow as any).tag?.id ?? selectedCattle.value.tag_id,
+					}
+					selectedCattle.value = { ...selectedCattle.value, ...updated }
+				}
+			} catch (e) { console.warn('Error aplicando cow.status update:', e) }
+		},
+		onCowError: (err) => { console.warn('onCowError (Mi_ganado):', err) },
+		onCowCreated: async (cow) => { console.log('🆕 cow.created (Mi_ganado):', cow); await loadCattle() },
+		onCowUpdated: async (cow) => { console.log('♻️ cow.updated (Mi_ganado):', cow); await loadCattle() },
+		onCowDeleted: (payload) => {
+			try {
+				const id = Number((payload && payload.id) ?? payload)
+				if (!isNaN(id)) {
+					const idx = cattleList.value.findIndex(c => Number(c.id) === id)
+					if (idx >= 0) cattleList.value.splice(idx, 1)
+				}
+				console.log('🗑️ cow.deleted aplicado (Mi_ganado):', id)
+			} catch (e) { console.warn('No se pudo aplicar cow.deleted:', e) }
+		},
+		onUserCowsUpdated: async () => { console.log('👥 user.cows.updated (Mi_ganado): recargando lista'); await loadCattle() },
+		onTagUpdated: async (tag: any) => {
+			try {
+						const rawLoc = tag?.current_location
+						const normalizedLoc = normalizeLocation(rawLoc)
+						const zone = inferZoneFromLocation(normalizedLoc, tag)
+				const formatLastSeen = (lastTransmission?: string): string => {
+					if (!lastTransmission) return 'Sin señal'
+					try {
+						const date = new Date(lastTransmission)
+						const now = new Date()
+						const diffMs = now.getTime() - date.getTime()
+						const diffMins = Math.floor(diffMs / 60000)
+						if (diffMins < 1) return 'Hace unos momentos'
+						if (diffMins < 60) return `Hace ${diffMins} minutos`
+						const diffHours = Math.floor(diffMins / 60)
+						if (diffHours < 24) return `Hace ${diffHours} horas`
+						const diffDays = Math.floor(diffHours / 24)
+						return `Hace ${diffDays} días`
+					} catch { return 'Sin señal' }
+				}
+				if (tag?.id) {
+					cattleList.value = cattleList.value.map(c => {
+						if (Number(c.tag_id) === Number(tag.id)) {
+							return {
+								...c,
+								zone,
+								status: tag?.status ?? c.status,
+								battery_level: typeof tag?.battery_level === 'number' ? tag.battery_level : c.battery_level,
+								lastSeen: formatLastSeen(tag?.last_transmission)
+							}
+						}
+						return c
+					})
+					if (selectedCattle.value && Number(selectedCattle.value.tag_id) === Number(tag.id)) {
+						selectedCattle.value = {
+							...selectedCattle.value,
+							zone,
+							status: tag?.status ?? selectedCattle.value.status,
+							battery_level: typeof tag?.battery_level === 'number' ? tag.battery_level : selectedCattle.value.battery_level,
+							lastSeen: formatLastSeen(tag?.last_transmission)
+						}
+					}
+				}
+			} catch (e) { console.warn('Error aplicando tag.updated:', e) }
+		}
+	})
+}
+
+/**
+ * Cierra la conexión WS y limpia suscripciones
+ */
+const closeWebSocket = () => {
+	try {
+		if (userId.value && userId.value > 0) {
+			try { wsClient.userUnsubscribe(userId.value) } catch (e) { console.warn('userUnsubscribe falló', e) }
+		}
+	} catch {}
+	try { wsClient.disconnect() } catch (e) { console.warn('wsClient.disconnect falló', e) }
+	wsConnected.value = false
 }
 
 onMounted(async () => {
@@ -247,106 +558,23 @@ onMounted(async () => {
 	await loadZones()
 	await loadCattle()
 
-	// Inicializar WebSocket y suscribirse a eventos de registro de vacas
-	wsClient.connect({
-		onConnect: (socketId) => {
-			console.log('✅ WebSocket conectado (Mi_ganado):', socketId)
-			// Suscribir al usuario si existe
-			if (userId.value && userId.value > 0) {
-				wsClient.userSubscribe(userId.value)
-			} else {
-				console.warn('No hay userId disponible para user.subscribe')
-			}
-		},
-		onDisconnect: () => {
-			console.log('❌ WebSocket desconectado (Mi_ganado)')
-		},
-		onError: (err) => {
-			console.error('Error WebSocket (Mi_ganado):', err)
-		},
-		onCowRegistrationRequest: (payload) => {
-			console.log('📨 cow.registration.request (Mi_ganado):', payload)
-			// Prefill add dialog with info from payload
-			try {
-				if (payload) {
-					// Prefill 'ear_tag' (campo mostrado en UI como "ID del Animal (ear_tag)")
-					// El campo del formulario se llama tempAdd.customId, así que lo rellenamos con el valor del payload
-					// Preferir ear_tag (campo que usan en la BD) si está presente
-					if (payload.ear_tag) {
-						tempAdd.customId = String(payload.ear_tag)
-					} else if (payload.id_tag) {
-						tempAdd.customId = String(payload.id_tag)
-					} else if (payload.tag_id) {
-						tempAdd.customId = String(payload.tag_id)
-					} else if (payload.tag && payload.tag.id_tag) {
-						tempAdd.customId = String(payload.tag.id_tag)
-					}
+	// Iniciar WebSocket usando la función centralizada
+	initWebSocket()
 
-					// también mantener beacons si se usa en otros flujos
-					tempAdd.beacons = []
-					if (payload.tag_id) tempAdd.beacons.push(String(payload.tag_id))
-
-					// mac_address -> anotar en notas para referencia
-					if (payload.mac_address) tempAdd.notes = `MAC: ${payload.mac_address}`
-
-					// zona sugerida
-					if (payload.zone) tempAdd.zone = payload.zone
-
-					// abrir diálogo de agregar vaca
-					addDialogOpen.value = true
-
-					// si viene redirect_url, navegar a ella (por ejemplo para flujo móvil)
-					if (payload.redirect_url) {
-						try {
-							window.location.href = payload.redirect_url
-						} catch (navErr) {
-							console.warn('No se pudo navegar a redirect_url:', navErr)
-						}
-					}
-				}
-			} catch (err) {
-				console.error('Error al manejar cow.registration.request:', err)
-			}
-		},
-		onCowRegistrationTimeout: (payload) => {
-			console.log('⏱️ cow.registration.timeout (Mi_ganado):', payload)
-			// Cerrar diálogo y avisar al usuario
-			addDialogOpen.value = false
-			error.value = 'El registro del tag venció. Intenta nuevamente.'
-			setTimeout(() => { error.value = null }, 5000)
-		},
-		onCowRegistrationError: (payload) => {
-			console.log('❌ cow.registration.error (Mi_ganado):', payload)
-			addDialogOpen.value = false
-			error.value = payload?.message || 'Error durante el registro del tag'
-			setTimeout(() => { error.value = null }, 5000)
-		}
-		,onCowStatus: (cow) => {
-			// Actualizaciones en tiempo real para una vaca suscrita
-			console.log('🔄 onCowStatus (Mi_ganado):', cow)
-			try {
-				if (selectedCattle.value && String(selectedCattle.value.id) === String(cow.id)) {
-					// actualizar campos visibles del modal
-					selectedCattle.value = { ...selectedCattle.value, ...cow }
-				}
-			} catch (e) {
-				console.warn('Error aplicando cow.status update:', e)
-			}
-		},
-		onCowError: (err) => {
-			console.warn('onCowError (Mi_ganado):', err)
-			// No mostrar errores de conexión del servidor al usuario
-			// Solo registrar en consola para debugging
-		}
+	// Si el userId aún no estaba listo al conectar, suscribir en cuanto esté disponible
+	watch(userId, (val) => {
+	    try {
+	        if (val && val > 0 && wsClient.isConnected()) {
+	            console.log('🔄 userId disponible, suscribiendo a user:', val)
+	            wsClient.userSubscribe(val)
+	        }
+	    } catch (e) { console.warn('Fallo al suscribir user tras cambio de userId:', e) }
 	})
 })
 
 onUnmounted(() => {
-	// Desuscribir usuario y cerrar WebSocket al salir del componente
-	if (userId.value && userId.value > 0) {
-		try { wsClient.userUnsubscribe(userId.value) } catch (e) { console.warn('userUnsubscribe falló', e) }
-	}
-	wsClient.disconnect()
+	// Usar closeWebSocket para limpiar suscripciones y desconectar
+	closeWebSocket()
 })
 
 // Suscribir/desuscribir a la vaca cuando se abre/cierra el modal de detalle
@@ -379,6 +607,31 @@ watch(addDialogOpen, (isOpen) => {
 		addErrors.tag = ''
 		addErrors.image = ''
 		addErrors.zone = ''
+		// Limpiar imagen y archivo previo para evitar que persista entre aperturas
+		try {
+			if (currentAddObjectUrl) {
+				URL.revokeObjectURL(currentAddObjectUrl)
+				currentAddObjectUrl = null
+			}
+		} catch {}
+		selectedFile.value = null
+		tempAdd.image = ''
+	} else {
+		// Al cerrar el diálogo, asegurarse de limpiar todo el estado temporal
+		try {
+			if (currentAddObjectUrl) {
+				URL.revokeObjectURL(currentAddObjectUrl)
+				currentAddObjectUrl = null
+			}
+		} catch {}
+		selectedFile.value = null
+		tempAdd.tag = ''
+		tempAdd.image = ''
+		tempAdd.zone = ''
+		tempAdd.notes = ''
+		tempAdd.beacons = []
+		tempAdd.customId = ''
+		tempAdd.favorite_food = ''
 	}
 })
 
@@ -491,12 +744,12 @@ const handleAddCattle = async (newCattle: any) => {
 			const uniqueTagId = generateNumericTagId()
 			const macAddress = `MAC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
 
-			console.log('📍 Creando tag único (numérico id_tag):', uniqueTagId)
+			console.log('📍 Creando tag único (numérico id):', uniqueTagId)
 			console.log('📡 MAC Address:', macAddress)
 			console.log('🗺️ Zona inicial:', newCattle.zone || 'Sin zona')
 			
 			const newTag = await createTag({
-				id_tag: uniqueTagId,
+				id: uniqueTagId,
 				mac_address: macAddress,
 				battery_level: 100,
 				status: 'active',
@@ -517,7 +770,8 @@ const handleAddCattle = async (newCattle: any) => {
 				tagIdToUse, // Usar el tag_id (existente o nuevo)
 				newCattle.tag || `Ganado ${Date.now()}`,
 				userId.value,
-				newCattle.notes || 'Sin información adicional',
+				newCattle.favorite_food || undefined,
+				newCattle.notes || undefined,
 				selectedFile.value,
 				cowEarTag // Pasar ear_tag personalizado si fue proporcionado
 			)
@@ -525,7 +779,10 @@ const handleAddCattle = async (newCattle: any) => {
 			// Si no hay imagen, usar GraphQL createVaca
 			const createInput: any = {
 				nombre: newCattle.tag || `Ganado ${Date.now()}`,
-				comida_preferida: newCattle.favorite_food || 'No especificada',
+				// Enviar descripción desde el campo de notas
+				descripcion: newCattle.notes || undefined,
+				// Enviar comida_preferida solo si se capturó explícitamente
+				comida_preferida: newCattle.favorite_food || undefined,
 				id_usuario: userId.value,
 				tag_id: tagIdToUse // Usar el tag_id (existente o nuevo)
 			}
@@ -654,12 +911,13 @@ const saveEditFromTemp = async () => {
 					console.log('%c🔁 Tag compartido detectado — creando tag nuevo y asignando sólo a esta vaca', 'background:#FFC107;color:#000;padding:4px')
 					try {
 						const newTagPayload = {
-							id_tag: generateNumericTagId(),
+							id: generateNumericTagId(),
 							mac_address: `MAC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
 							battery_level: 100,
 							status: 'active',
 							last_transmission: new Date().toISOString(),
-							current_location: editTemp.zone === '' || editTemp.zone === null ? '' : editTemp.zone,
+							// Backend espera objeto TagLocationInput o null
+							current_location: (editTemp.zone === '' || editTemp.zone === null) ? null : { name: editTemp.zone },
 						}
 						console.log('📤 Payload new tag:', JSON.stringify(newTagPayload, null, 2))
 						const created = await createTag(newTagPayload)
@@ -677,8 +935,8 @@ const saveEditFromTemp = async () => {
 					// Tag único: es seguro actualizar el tag directamente
 					if (!DISABLE_TAG_UPDATE) {
 						console.log('%c📍 ACTUALIZANDO ZONA DEL TAG (único)', 'background: #4CAF50; color: white; font-size: 14px; padding: 4px;')
-						const updatePayload: { current_location?: string | null } = {}
-						updatePayload.current_location = editTemp.zone === '' || editTemp.zone === null ? null : editTemp.zone
+						const updatePayload: { current_location?: { name: string } | null } = {}
+						updatePayload.current_location = (editTemp.zone === '' || editTemp.zone === null) ? null : { name: editTemp.zone }
 						console.log('📤 Payload enviado al backend:', JSON.stringify(updatePayload, null, 2))
 						try {
 							const result = await updateTag(effectiveTagId, updatePayload)
@@ -701,11 +959,14 @@ const saveEditFromTemp = async () => {
 			console.log('ℹ️ La zona no cambió, no es necesario actualizar el tag')
 		}
 		
-		// Actualizar los datos de la vaca (nombre, comida favorita)
+		// Actualizar los datos de la vaca (nombre, descripción, comida favorita)
 		console.log('%c🐄 ACTUALIZANDO DATOS DE LA VACA', 'background: #FF9800; color: white; font-size: 14px; padding: 4px;')
 		// Preparar payload de actualización de vaca. Si creamos un tag nuevo, asignarlo aquí.
 		const vacaUpdatePayload: any = {
 			nombre: editTemp.tag,
+			// Enviar 'descripcion' desde el campo de notas
+			descripcion: editTemp.notes || undefined,
+			// Enviar 'comida_preferida' desde su propio campo si existe
 			comida_preferida: editTemp.favorite_food || undefined,
 			ear_tag: editTemp.ear_tag || undefined,
 		}
@@ -723,10 +984,14 @@ const saveEditFromTemp = async () => {
 			image: editTemp.image || currentCattle?.image || null,
 			zone: editTemp.zone === '' ? null : editTemp.zone,
 			lastSeen: currentCattle?.lastSeen || 'Hace unos momentos',
-			notes: editTemp.notes || currentCattle?.notes || '',
+			notes: (() => {
+				const n = editTemp.notes
+				if (typeof n === 'string' && n.trim() !== '') return n
+				return currentCattle?.notes || ''
+			})(),
 			beacons: editTemp.beacons && editTemp.beacons.length ? [...editTemp.beacons] : currentCattle?.beacons || [],
 			ear_tag: editTemp.ear_tag,
-			favorite_food: editTemp.favorite_food,
+			favorite_food: currentCattle?.favorite_food,
 			tag_id: (editTemp as any)._newTagId || currentCattle?.tag_id,
 			behaviorStats: currentCattle?.behaviorStats
 		}
@@ -871,7 +1136,7 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 
 <template>
 	<div class="p-6 space-y-6">
-		<!-- Header -->
+		<!-- Header 
 		<div class="flex items-center justify-between">
 			<div>
 				<h1 class="text-3xl font-bold text-foreground">Mi Ganadería</h1>
@@ -881,9 +1146,14 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 				<Plus class="h-5 w-5" />
 				Agregar Ganado
 			</Button>
-		</div>
+		</div> -->
 
-	<!-- Filters -->
+		<!-- Prompt modal para registro de tag (se muestra al recibir evento WS) -->
+			<TagDetectedPrompt v-model:open="detectedPromptOpen" :payload="detectedPromptPayload" @accept="onPromptAccept" @cancel="onPromptCancel" />
+			<!-- Mostrar una alerta breve cuando se detecte un tag -->
+			<div v-if="showDetectedTag" class="mt-4">
+				<TagDetectada :mensaje="detectedTag?.mensaje" :tagId="detectedTag?.tagId" :nivel="detectedTag?.nivel" @close="onDetectedClose" />
+			</div>
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center">
 		<div class="relative flex-1 max-w-md">
 			<Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -911,7 +1181,7 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 		</Select>			<div class="flex gap-1 border rounded-lg p-1">
 				<Button :variant="viewMode === 'grid' ? 'secondary' : 'ghost'" size="sm" @click="viewMode = 'grid'" class="gap-2">
 					<LayoutGrid class="h-4 w-4" />
-					Cards
+					Cartas
 				</Button>
 				<Button :variant="viewMode === 'list' ? 'secondary' : 'ghost'" size="sm" @click="viewMode = 'list'" class="gap-2">
 					<List class="h-4 w-4" />
@@ -1057,7 +1327,7 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 		<!-- Modals -->
 				<Dialog v-model:open="detailModalOpen">
 					<DialogContent :showCloseButton="false" class="w-full md:max-w-xl p-6 rounded-lg bg-white shadow-lg max-h-[80vh] overflow-y-auto">
-					<div class="relative">
+				    <div class="relative">
 
 						<!-- Header row: image left + title/info right -->
 						<div class="grid grid-cols-1 gap-6 md:grid-cols-3 items-start">
@@ -1078,7 +1348,7 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 										<div class="md:col-span-2">
 											<div class="flex flex-col md:flex-row md:items-start md:justify-between">
 																<div class="max-w-lg">
-																	<h3 class="text-3xl font-extrabold leading-tight">Etiqueta: {{ selectedCattle?.ear_tag }}</h3>
+																	<h2 class="text-2xl font-bold leading-tight">Etiqueta: {{ selectedCattle?.ear_tag }}</h2>
 																	<p class="text-xl font-semibold mt-1">{{ selectedCattle?.tag }}</p>
 																</div>
 									<div class="mt-3 md:mt-0 flex flex-col gap-2">
@@ -1214,7 +1484,7 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 					<!-- ID del Animal (opcional, puede proporcionarlo el usuario) -->
 					<div>
 						<label class="block text-sm font-medium mt-1">Numero de etiqueta</label>
-						<input v-model="tempAdd.customId" class="w-full rounded-md border p-2 bg-white!" placeholder="Dejar vacío para generar automáticamente" />
+						<Input v-model="tempAdd.customId" class="w-full rounded-md border p-2 bg-white!" placeholder="Agregar etiqueta" />
 						<div v-if="addErrors.customId" class="text-destructive text-sm mt-1">{{ addErrors.customId }}</div>
 						<div v-else class="text-xs text-muted-foreground mt-1">Si lo proporcionas, se usará como ID de la vaca.</div>
 					</div>						<!-- Zona inicial (select) - OPCIONAL -->
@@ -1246,8 +1516,11 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 							</div>-->
 							<!-- camera -->
 							<div @click.prevent="triggerAddCamera" class="flex flex-col items-center justify-center border-dashed border-2 border-gray-200 rounded-lg p-6 cursor-pointer hover:bg-white">
-								<div class="text-sm font-medium">Tomar foto</div>
-								<div class="text-xs text-muted-foreground mt-2">Abrir la cámara (si el dispositivo lo permite)</div>
+								<Camera class="w-8 h-8 text-muted-foreground mb-2" />
+								<div class="text-sm font-medium">Agregar Imagen</div>
+
+								
+								<div class="text-xs text-muted-foreground mt-2">Agregar Imagen(si el dispositivo lo permite)</div>
 							</div>
 						</div>
 							<div class="text-xs text-muted-foreground mt-2">Opcional: Si no se proporciona, se usará una imagen por defecto</div>
@@ -1266,8 +1539,8 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 						</span>
 					</div>
 
-					<label class="block text-sm font-medium mt-3">Comida Preferida</label>
-						<textarea v-model="tempAdd.favorite_food" placeholder="Ej: Alfalfa, Maíz, Pasto fresco..." class="w-full rounded-md border p-3 h-24 bg-white!"></textarea>
+					<label class="block text-sm font-medium mt-3">Descripción</label>
+						<textarea v-model="tempAdd.notes" placeholder="Describe a la vaca..." class="w-full rounded-md border p-3 h-24 bg-white!"></textarea>
 						
 						<!-- Error message -->
 						<div v-if="error" class="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
@@ -1347,9 +1620,9 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 							</span>
 						</div>
 
-						<!-- Notas adicionales -->
-						<label class="block text-sm font-medium mt-3">Comida Preferida</label>
-						<textarea v-model="editTemp.favorite_food" placeholder="Ej: Alfalfa, Maíz, Pasto fresco..." class="w-full rounded-md border p-3 h-28 bg-white!"></textarea>
+						<!-- Descripción -->
+						<label class="block text-sm font-medium mt-3">Descripción</label>
+						<textarea v-model="editTemp.notes" placeholder="Describe a la vaca..." class="w-full rounded-md border p-3 h-28 bg-white!"></textarea>
 					</template>
 				</div>
 
@@ -1386,5 +1659,3 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 		</AlertDialog>
 	</div>
 </template>
-
-<!-- tempAdd and editTemp are declared in the <script setup> block -->
