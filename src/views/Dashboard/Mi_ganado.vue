@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, reactive, defineAsyncComponent } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUser } from '@/composables/useUser'
 import { wsClient } from '@/services/WebSockets'
@@ -24,7 +24,8 @@ import {
 
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-//import TagDetectedPrompt from '@/components/TagDetectedPrompt.vue'
+import TagDetectedPrompt from '@/components/TagDetectedPrompt.vue'
+import TagDetectada from '@/components/TagDetectada.vue'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -404,6 +405,12 @@ const initWebSocket = () => {
 			console.log('📨 cow.registration.request (Mi_ganado):', payload)
 			try {
 				if (payload) {
+					// Mostrar un toast breve indicando que se detectó un tag
+					detectedTag.value = { mensaje: payload?.message ?? payload?.mensaje ?? 'Tag detectado', tagId: payload?.tag_id ?? payload?.id ?? payload?.tag?.id ?? null, nivel: 'info' }
+					showDetectedTag.value = true
+					if (detectedTimeout) { clearTimeout(detectedTimeout); detectedTimeout = null }
+					detectedTimeout = setTimeout(() => { onDetectedClose() }, 6000)
+					// Abrir prompt para confirmar registro
 					detectedPromptPayload.value = payload
 					detectedPromptOpen.value = true
 					if (payload.redirect_url) {
@@ -415,12 +422,18 @@ const initWebSocket = () => {
 		onCowRegistrationTimeout: (payload) => {
 			console.log('⏱️ cow.registration.timeout (Mi_ganado):', payload)
 			addDialogOpen.value = false
+			// Cerrar prompt de registro si estaba abierto
+			detectedPromptOpen.value = false
+			detectedPromptPayload.value = null
 			error.value = 'El registro del tag venció. Intenta nuevamente.'
 			setTimeout(() => { error.value = null }, 5000)
 		},
 		onCowRegistrationError: (payload) => {
 			console.log('❌ cow.registration.error (Mi_ganado):', payload)
 			addDialogOpen.value = false
+			// Cerrar prompt si hay error
+			detectedPromptOpen.value = false
+			detectedPromptPayload.value = null
 			error.value = payload?.message || 'Error durante el registro del tag'
 			setTimeout(() => { error.value = null }, 5000)
 		},
@@ -1148,12 +1161,13 @@ const getBadgeClass = (lastSeen?: string | null): string => {
 			</Button>
 		</div> -->
 
+		<!-- Toast breve cuando se detecta un tag -->
+		<TagDetectada v-if="showDetectedTag" :mensaje="detectedTag?.mensaje" :tagId="detectedTag?.tagId" :nivel="detectedTag?.nivel" @close="onDetectedClose" />
+
 		<!-- Prompt modal para registro de tag (se muestra al recibir evento WS) -->
-			<TagDetectedPrompt v-model:open="detectedPromptOpen" :payload="detectedPromptPayload" @accept="onPromptAccept" @cancel="onPromptCancel" />
-			<!-- Mostrar una alerta breve cuando se detecte un tag -->
-			<div v-if="showDetectedTag" class="mt-4">
-				<TagDetectada :mensaje="detectedTag?.mensaje" :tagId="detectedTag?.tagId" :nivel="detectedTag?.nivel" @close="onDetectedClose" />
-			</div>
+		<TagDetectedPrompt v-model:open="detectedPromptOpen" :payload="detectedPromptPayload" @accept="onPromptAccept" @cancel="onPromptCancel" />
+
+	<!-- Filters -->
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center">
 		<div class="relative flex-1 max-w-md">
 			<Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
