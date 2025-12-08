@@ -5,15 +5,22 @@ interface Props {
   mensaje?: string
 }
 
+import { computed } from 'vue'
+
 const props = withDefaults(defineProps<Props>(), {
   open: false,
   mensaje: 'Se ha detectado un tag',
 })
 
+// Exponer valores reactivamente para uso en template de forma consistente
+const payload = computed(() => props.payload)
+const mensaje = computed(() => props.mensaje)
+const open = computed(() => props.open)
+
 const emit = defineEmits<{ (e: 'accept', payload?: any): void; (e: 'cancel'): void; (e: 'update:open', val: boolean): void }>()
 
 function onAccept() {
-  emit('accept', props.payload)
+  emit('accept', payload.value)
   emit('update:open', false)
 }
 
@@ -56,7 +63,7 @@ function onCancel() {
                   </span>
                   Tag Id:
                 </div>
-                <div class="value value-anim">{{ props.payload?.tag?.name ?? props.payload?.name ?? props.payload?.tag_name ?? props.payload?.tag_id ?? props.payload?.id ?? '-' }}</div>
+                <div class="value value-anim">{{ payload?.tag?.name ?? payload?.name ?? payload?.tag_name ?? payload?.tag_id ?? payload?.id ?? '-' }}</div>
 
                 <div class="label label-anim flex items-center gap-2">
                   <span class="info-icon user-icon" aria-hidden="true">
@@ -67,7 +74,7 @@ function onCancel() {
                   </span>
                   Usuario:
                 </div>
-                <div class="value value-anim">{{ props.payload?.user?.full_name ?? props.payload?.user?.name ?? props.payload?.user?.display_name ?? props.payload?.user?.username ?? props.payload?.user?.id_user ?? props.payload?.user?.id ?? props.payload?.user?.email ?? '-' }}</div>
+                <div class="value value-anim">{{ payload?.user?.full_name ?? payload?.user?.name ?? payload?.user?.display_name ?? payload?.user?.username ?? payload?.user?.id_user ?? payload?.user?.id ?? payload?.user?.email ?? '-' }}</div>
               </div>
             </div>
           </div>

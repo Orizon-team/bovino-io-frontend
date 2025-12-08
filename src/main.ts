@@ -22,7 +22,9 @@ registerSW({
     navigator.serviceWorker.ready
       .then((reg) => {
         console.log('SW ready, llamando a subscribeToPush...')
-        return subscribeToPush(reg)
+        const userString = localStorage.getItem('user')
+        const userId = userString ? JSON.parse(userString).id_user : undefined
+        return subscribeToPush(reg, userId)
       })
       .then(() => {
         console.log('subscribeToPush completado exitosamente')
